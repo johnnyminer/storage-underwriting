@@ -385,7 +385,10 @@ function runUnderwriting(prop, mgmtFeePct = 0.06, capExPct = 0.05) {
   const mgmtFee = egi * mgmtFeePct
   const capEx = egi * capExPct
   const totalOpEx = prop.operatingExpenses + prop.propertyTax + prop.insurance + mgmtFee + capEx
-  const noi = egi - totalOpEx
+  const calcNoi = egi - totalOpEx
+  const hasNoiOverride = prop.noiOverride != null && prop.noiOverride !== '' && !isNaN(prop.noiOverride) && Number(prop.noiOverride) !== 0
+  const noi = hasNoiOverride ? Number(prop.noiOverride) : calcNoi
+  const noiSource = hasNoiOverride ? 'listed' : 'calculated'
   const capRate = noi / prop.purchasePrice
   const expenseRatio = totalOpEx / egi
   const pricePerUnit = prop.purchasePrice / prop.unitCount
@@ -425,7 +428,7 @@ function runUnderwriting(prop, mgmtFeePct = 0.06, capExPct = 0.05) {
   const autoVerdict = reasons.length === 0 ? 'PASS' : 'FAIL'
   const verdict = prop.verdictOverride || 'PENDING'
 
-  return { gpi, egi, mgmtFee, capEx, totalOpEx, noi, capRate, expenseRatio, pricePerUnit, pricePerSF, breakEvenOcc, revenuePerSF, scenarios, verdict, autoVerdict, reasons }
+  return { gpi, egi, mgmtFee, capEx, totalOpEx, noi, calcNoi, noiSource, capRate, expenseRatio, pricePerUnit, pricePerSF, breakEvenOcc, revenuePerSF, scenarios, verdict, autoVerdict, reasons }
 }
 
 // ─── OFFER LETTER GENERATOR ─────────────────────────────────────────────────
@@ -801,7 +804,7 @@ function ScrapeURLModal({ onImport, onClose }) {
   function extractFromHTML(html, site) {
     const parser = new DOMParser()
     const doc = parser.parseFromString(html, 'text/html')
-    const data = { name: '', address: '', city: '', state: loadSettings().defaultState, zip: '', purchasePrice: 0, unitCount: 0, totalSF: 0, occupancyRate: 0.85, avgRentPerUnit: 0, operatingExpenses: 0, propertyTax: 0, insurance: 0, listingUrl: '', notes: '' }
+    const data = { name: '', address: '', city: '', state: loadSettings().defaultState, zip: '', purchasePrice: 0, unitCount: 0, totalSF: 0, occupancyRate: 0.85, avgRentPerUnit: 0, operatingExpenses: 0, propertyTax: 0, insurance: 0, listingUrl: '', notes: '', noiOverride: '' }
 
     // Try JSON-LD structured data first
     const jsonLdScripts = doc.querySelectorAll('script[type="application/ld+json"]')
@@ -911,7 +914,7 @@ function ScrapeURLModal({ onImport, onClose }) {
 
   // Extract property data from pasted plain text
   function extractFromText(text) {
-    const data = { name: '', address: '', city: '', state: loadSettings().defaultState, zip: '', purchasePrice: 0, unitCount: 0, totalSF: 0, occupancyRate: 0.85, avgRentPerUnit: 0, operatingExpenses: 0, propertyTax: 0, insurance: 0, listingUrl: '', notes: '' }
+    const data = { name: '', address: '', city: '', state: loadSettings().defaultState, zip: '', purchasePrice: 0, unitCount: 0, totalSF: 0, occupancyRate: 0.85, avgRentPerUnit: 0, operatingExpenses: 0, propertyTax: 0, insurance: 0, listingUrl: '', notes: '', noiOverride: '' }
 
     // Price patterns: "$1,200,000", "Price: $850,000", "Asking $750K", "1.2M"
     const priceMatch = text.match(/(?:price|asking|listed?\s*(?:at|for)?)[:\s]*\$?([\d,]+(?:\.\d+)?(?:\s*[MmKk])?)/i)
@@ -1264,7 +1267,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty }) {
       purchasePrice: +newProp.purchasePrice, unitCount: +newProp.unitCount, totalSF: +newProp.totalSF || 0,
       occupancyRate: newProp.occupancyRate ? +newProp.occupancyRate / 100 : 0.85, avgRentPerUnit: +newProp.avgRentPerUnit || 0,
       operatingExpenses: +newProp.operatingExpenses || 0, propertyTax: +newProp.propertyTax || 0, insurance: +newProp.insurance || 0,
-      yearBuilt: 2000, notes: newProp.notes, imported: true
+      yearBuilt: 2000, notes: newProp.notes, noiOverride: '', imported: true
     }
     setAddFormError(null)
     setProperties(prev => [...prev, p])
@@ -2473,8 +2476,27 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <MetricCard label="Gross Potential Income" value={fmt(uw.gpi)} sub="Annual (100% occupied)" />
         <MetricCard label="Effective Gross Income" value={fmt(uw.egi)} sub={`At ${pct(prop.occupancyRate)} occupancy`} />
-        <MetricCard label="Net Operating Income" value={fmt(uw.noi)} color={uw.noi > 0 ? "text-emerald-600" : "text-red-600"} sub="After all expenses" />
-        <MetricCard label="Cap Rate" value={pct(uw.capRate)} color={uw.capRate >= 0.07 ? "text-emerald-600" : uw.capRate >= 0.06 ? "text-amber-600" : "text-red-600"} sub="NOI / Listing Price" />
+        {/* Editable NOI — click to enter listed/agent NOI */}
+        <div className="bg-white rounded-xl border border-navy-100 p-3 shadow-sm">
+          <p className="text-xs text-navy-500 mb-1 font-medium">Net Operating Income</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-navy-400">$</span>
+            <input
+              type="number"
+              className="w-full text-lg font-bold bg-transparent border-b border-dashed border-navy-300 focus:border-blue-500 focus:outline-none py-0.5"
+              style={{ color: uw.noi > 0 ? '#059669' : '#dc2626' }}
+              value={prop.noiOverride != null && prop.noiOverride !== '' ? prop.noiOverride : ''}
+              placeholder={fmt(uw.calcNoi).replace('$', '')}
+              onChange={e => handlePropEdit('noiOverride', e.target.value === '' ? '' : +e.target.value)}
+            />
+          </div>
+          <p className="text-xs text-navy-400 mt-1">
+            {uw.noiSource === 'listed'
+              ? <span className="text-blue-600">Listed NOI — <button className="underline hover:text-blue-800" onClick={() => handlePropEdit('noiOverride', '')}>use calculated</button></span>
+              : <span>Calculated — enter agent/listed NOI above</span>}
+          </p>
+        </div>
+        <MetricCard label="Cap Rate" value={pct(uw.capRate)} color={uw.capRate >= 0.07 ? "text-emerald-600" : uw.capRate >= 0.06 ? "text-amber-600" : "text-red-600"} sub={uw.noiSource === 'listed' ? 'Listed NOI / Listing Price' : 'NOI / Listing Price'} />
         <MetricCard label="Expense Ratio" value={pct(uw.expenseRatio)} color={uw.expenseRatio <= 0.35 ? "text-emerald-600" : uw.expenseRatio <= 0.40 ? "text-amber-600" : "text-red-600"} sub="Expenses / EGI" />
         <MetricCard label="Cash-on-Cash" value={pct(uw.scenarios[2].cashOnCash)} color={uw.scenarios[2].cashOnCash >= 0.08 ? "text-emerald-600" : uw.scenarios[2].cashOnCash >= 0 ? "text-amber-600" : "text-red-600"} sub="Conventional scenario" />
         <MetricCard label="Break-even Occ." value={pct(uw.breakEvenOcc)} color={uw.breakEvenOcc <= 0.60 ? "text-emerald-600" : uw.breakEvenOcc <= 0.75 ? "text-amber-600" : "text-red-600"} sub="Min occupancy for NOI > 0" />
@@ -2659,7 +2681,7 @@ function toDbRow(prop) {
     listing_url: prop.listingUrl || '',
     verdict_override: prop.verdictOverride || '',
     notes: prop.notes || '',
-    source: prop.source || '',
+    source: JSON.stringify({ noiOverride: prop.noiOverride ?? '', _src: prop.source || '' }),
     imported: !!prop.imported,
     updated_at: new Date().toISOString(),
   }
@@ -2685,7 +2707,12 @@ function fromDbRow(row) {
     listingUrl: row.listing_url || '',
     verdictOverride: row.verdict_override || '',
     notes: row.notes || '',
-    source: row.source || '',
+    ...(() => {
+      try {
+        const extra = JSON.parse(row.source || '{}')
+        return { noiOverride: extra.noiOverride ?? '', source: extra._src || '' }
+      } catch { return { noiOverride: '', source: row.source || '' } }
+    })(),
     imported: row.imported,
   }
 }
