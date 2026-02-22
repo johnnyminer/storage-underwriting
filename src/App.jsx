@@ -1756,31 +1756,96 @@ async function getCountyFromCoords(lat, lng) {
   return null
 }
 
-// Fetch Census County Business Patterns for NAICS 531130 (self-storage)
+// Fetch Census CBP benchmark with multi-county radius adjustment
+// Uses all counties in the state, weighted by how much they overlap the 10-mile search radius
 async function fetchCensusBenchmark(lat, lng) {
   try {
-    // Step 1: Get county FIPS from coordinates
-    const county = await getCountyFromCoords(lat, lng)
-    if (!county) return null
+    // Step 1: Get the property's county
+    const homeCounty = await getCountyFromCoords(lat, lng)
+    if (!homeCounty) return null
 
-    // Step 2: Query Census CBP for NAICS 531130 establishment count
-    // Try 2022 first, fall back to 2021
-    for (const year of [2022, 2021]) {
-      try {
-        const cbpRes = await fetch(
-          `https://api.census.gov/data/${year}/cbp?get=ESTAB,NAICS2017&for=county:${county.countyCode}&in=state:${county.stateFips}&NAICS2017=531130`
-        )
-        if (!cbpRes.ok) continue
-        const cbpData = await cbpRes.json()
-        if (cbpData && cbpData.length > 1) {
-          const estab = parseInt(cbpData[1][0])
-          if (!isNaN(estab)) {
-            return { count: estab, county: county.countyName, year }
-          }
-        }
-      } catch { continue }
+    // Step 2: Fetch county centroids + land areas from TIGERweb, and CBP data — in parallel
+    let cbpData = null, cbpYear = null
+    const [countyGeoRes, ...cbpResults] = await Promise.all([
+      fetch(`https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Current/MapServer/82/query?where=STATE=%27${homeCounty.stateFips}%27&outFields=STATE,COUNTY,BASENAME,CENTLAT,CENTLON,AREALAND&f=json&returnGeometry=false&resultRecordCount=200`).then(r => r.json()).catch(() => null),
+      fetch(`https://api.census.gov/data/2022/cbp?get=ESTAB,NAICS2017&for=county:*&in=state:${homeCounty.stateFips}&NAICS2017=531130`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`https://api.census.gov/data/2021/cbp?get=ESTAB,NAICS2017&for=county:*&in=state:${homeCounty.stateFips}&NAICS2017=531130`).then(r => r.ok ? r.json() : null).catch(() => null),
+    ])
+
+    // Use 2022, fall back to 2021
+    if (cbpResults[0] && cbpResults[0].length > 1) { cbpData = cbpResults[0]; cbpYear = 2022 }
+    else if (cbpResults[1] && cbpResults[1].length > 1) { cbpData = cbpResults[1]; cbpYear = 2021 }
+    if (!cbpData) return null
+
+    // Build lookup: county FIPS -> establishment count
+    const cbpMap = {}
+    for (let i = 1; i < cbpData.length; i++) {
+      const estab = parseInt(cbpData[i][0])
+      const countyCode = cbpData[i][cbpData[i].length - 1] // last field is county
+      if (!isNaN(estab)) cbpMap[countyCode] = estab
     }
-    return null
+
+    // If we can't get geo data, fall back to single-county count
+    const counties = countyGeoRes?.features?.map(f => f.attributes) || []
+    if (counties.length === 0) {
+      const singleCount = cbpMap[homeCounty.countyCode]
+      return singleCount ? { radiusEstimate: singleCount, countyTotal: singleCount, county: homeCounty.countyName, year: cbpYear, method: 'county' } : null
+    }
+
+    // Step 3: For each county, calculate distance and overlap with 10-mile radius
+    const SEARCH_RADIUS_MI = 10
+    const searchAreaSqMi = Math.PI * SEARCH_RADIUS_MI * SEARCH_RADIUS_MI // ~314 sq mi
+    const SQM_TO_SQMI = 3.861e-7
+    let radiusEstimate = 0
+    let countyTotal = 0 // home county total
+    const contributingCounties = []
+
+    for (const c of counties) {
+      const estab = cbpMap[c.COUNTY] || 0
+      if (estab === 0) continue
+
+      const cLat = parseFloat(c.CENTLAT)
+      const cLon = parseFloat(c.CENTLON)
+      const areaLandSqMi = (parseInt(c.AREALAND) || 0) * SQM_TO_SQMI
+
+      if (c.COUNTY === homeCounty.countyCode) countyTotal = estab
+
+      // Distance from property to county centroid
+      const distMi = haversine(lat, lng, cLat, cLon)
+
+      // Estimate overlap: what fraction of this county's facilities are within our search radius?
+      // Simple heuristic: if county centroid is within search radius, assume full overlap
+      // If centroid is within 2x radius, assume partial overlap based on area intersection
+      // Beyond 2x, assume zero overlap
+      const countyRadiusMi = Math.sqrt(areaLandSqMi / Math.PI) // approx "radius" of county as circle
+      let overlapFraction = 0
+
+      if (distMi <= SEARCH_RADIUS_MI * 0.5) {
+        // Property is deep inside this county — use area ratio
+        overlapFraction = Math.min(1, searchAreaSqMi / areaLandSqMi)
+      } else if (distMi <= SEARCH_RADIUS_MI + countyRadiusMi) {
+        // Partial overlap — estimate based on distance
+        const maxDist = SEARCH_RADIUS_MI + countyRadiusMi
+        const overlapDist = maxDist - distMi
+        overlapFraction = Math.min(1, (overlapDist / maxDist) * (searchAreaSqMi / areaLandSqMi))
+      }
+      // else: too far, overlapFraction stays 0
+
+      if (overlapFraction > 0.01) {
+        const contribution = estab * overlapFraction
+        radiusEstimate += contribution
+        contributingCounties.push({ name: c.BASENAME, count: estab, overlap: overlapFraction, contribution: Math.round(contribution) })
+      }
+    }
+
+    return {
+      radiusEstimate: Math.round(radiusEstimate),
+      countyTotal,
+      county: homeCounty.countyName,
+      year: cbpYear,
+      method: 'radius',
+      contributingCounties
+    }
   } catch {
     return null
   }
@@ -1890,7 +1955,7 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
             <span className="text-xs text-navy-400 bg-navy-50 px-2 py-1 rounded">
               {(within5.length + within10.length)} found via OpenStreetMap
               {censusBenchmark && (
-                <span className="ml-1 text-navy-500"> · Census: ~{censusBenchmark.count} in {censusBenchmark.county}</span>
+                <span className="ml-1 text-navy-500"> · Census est. ~{censusBenchmark.radiusEstimate} in 10-mi radius</span>
               )}
             </span>
           )}
@@ -1952,20 +2017,28 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
               )
             })()}
             <div className="bg-navy-50 rounded-lg p-3">
-              <div className="text-xs text-navy-500 mb-1">Census Benchmark</div>
+              <div className="text-xs text-navy-500 mb-1">Census Estimate</div>
               {censusBenchmark ? (
                 <>
-                  <div className="text-xl font-bold text-navy-900">~{censusBenchmark.count}</div>
-                  <div className="text-xs text-navy-500">{censusBenchmark.county} ({censusBenchmark.year})</div>
+                  <div className="text-xl font-bold text-navy-900">~{censusBenchmark.radiusEstimate}</div>
+                  <div className="text-xs text-navy-500">
+                    {censusBenchmark.method === 'radius' ? 'est. in 10-mi radius' : censusBenchmark.county} ({censusBenchmark.year})
+                  </div>
                   {(() => {
                     const osmCount = within5.length + within10.length
-                    const coverage = Math.round((osmCount / censusBenchmark.count) * 100)
+                    const benchmark = censusBenchmark.radiusEstimate
+                    const coverage = benchmark > 0 ? Math.round((osmCount / benchmark) * 100) : 0
                     return (
                       <div className={`text-xs font-medium mt-0.5 ${coverage >= 60 ? 'text-emerald-600' : coverage >= 30 ? 'text-amber-600' : 'text-red-600'}`}>
-                        OSM coverage: {coverage}%
+                        OSM coverage: {Math.min(coverage, 100)}%
                       </div>
                     )
                   })()}
+                  {censusBenchmark.method === 'radius' && censusBenchmark.contributingCounties?.length > 1 && (
+                    <div className="text-[10px] text-navy-400 mt-0.5">
+                      {censusBenchmark.contributingCounties.map(c => `${c.name}: ~${c.contribution}`).join(' · ')}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-sm text-navy-300">—</div>
