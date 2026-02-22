@@ -59,7 +59,7 @@ function parseCSV(text) {
       name: raw.name || raw.address || 'Unnamed',
       address: raw.address || '',
       city: raw.city || '',
-      state: raw.state || 'OH',
+      state: raw.state || loadSettings().defaultState,
       zip: raw.zip || '',
       purchasePrice: parseNum(raw.purchasePrice),
       unitCount: parseNum(raw.unitCount),
@@ -121,8 +121,27 @@ function generateCSVTemplate() {
 }
 
 // ─── HAVERSINE DISTANCE ────────────────────────────────────────────────────
-const COLUMBUS_LAT = 39.9612
-const COLUMBUS_LNG = -82.9988
+// ─── SETTINGS (persisted in localStorage) ───────────────────────────────────
+const DEFAULT_SETTINGS = {
+  homeCity: 'Columbus',
+  homeState: 'OH',
+  homeZip: '43215',
+  homeLat: 39.9612,
+  homeLng: -82.9988,
+  defaultState: 'OH',
+}
+
+function loadSettings() {
+  try {
+    const saved = localStorage.getItem('storagevault_settings')
+    if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) }
+  } catch {}
+  return { ...DEFAULT_SETTINGS }
+}
+
+function saveSettings(settings) {
+  try { localStorage.setItem('storagevault_settings', JSON.stringify(settings)) } catch {}
+}
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3959 // Earth radius in miles
@@ -132,7 +151,10 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-async function geocodeAndDistance(address, city, state, zip) {
+async function geocodeAndDistance(address, city, state, zip, homeLat, homeLng) {
+  const settings = loadSettings()
+  const refLat = homeLat ?? settings.homeLat
+  const refLng = homeLng ?? settings.homeLng
   const query = `${address}, ${city}, ${state} ${zip}`.trim().replace(/,\s*,/g, ',')
   try {
     const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=us&limit=1`, {
@@ -142,7 +164,7 @@ async function geocodeAndDistance(address, city, state, zip) {
     if (data.length > 0) {
       const lat = parseFloat(data[0].lat)
       const lng = parseFloat(data[0].lon)
-      return Math.round(haversineDistance(COLUMBUS_LAT, COLUMBUS_LNG, lat, lng))
+      return Math.round(haversineDistance(refLat, refLng, lat, lng))
     }
   } catch (e) { /* ignore geocoding errors */ }
   return null
@@ -591,7 +613,7 @@ function ScrapeURLModal({ onImport, onClose }) {
   function extractFromHTML(html, site) {
     const parser = new DOMParser()
     const doc = parser.parseFromString(html, 'text/html')
-    const data = { name: '', address: '', city: '', state: 'OH', zip: '', purchasePrice: 0, unitCount: 0, totalSF: 0, occupancyRate: 0.85, avgRentPerUnit: 0, operatingExpenses: 0, propertyTax: 0, insurance: 0, listingUrl: '', notes: '' }
+    const data = { name: '', address: '', city: '', state: loadSettings().defaultState, zip: '', purchasePrice: 0, unitCount: 0, totalSF: 0, occupancyRate: 0.85, avgRentPerUnit: 0, operatingExpenses: 0, propertyTax: 0, insurance: 0, listingUrl: '', notes: '' }
 
     // Try JSON-LD structured data first
     const jsonLdScripts = doc.querySelectorAll('script[type="application/ld+json"]')
@@ -701,7 +723,7 @@ function ScrapeURLModal({ onImport, onClose }) {
 
   // Extract property data from pasted plain text
   function extractFromText(text) {
-    const data = { name: '', address: '', city: '', state: 'OH', zip: '', purchasePrice: 0, unitCount: 0, totalSF: 0, occupancyRate: 0.85, avgRentPerUnit: 0, operatingExpenses: 0, propertyTax: 0, insurance: 0, listingUrl: '', notes: '' }
+    const data = { name: '', address: '', city: '', state: loadSettings().defaultState, zip: '', purchasePrice: 0, unitCount: 0, totalSF: 0, occupancyRate: 0.85, avgRentPerUnit: 0, operatingExpenses: 0, propertyTax: 0, insurance: 0, listingUrl: '', notes: '' }
 
     // Price patterns: "$1,200,000", "Price: $850,000", "Asking $750K", "1.2M"
     const priceMatch = text.match(/(?:price|asking|listed?\s*(?:at|for)?)[:\s]*\$?([\d,]+(?:\.\d+)?(?:\s*[MmKk])?)/i)
@@ -988,7 +1010,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty }) {
   const [showAddForm, setShowAddForm] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showScrapeModal, setShowScrapeModal] = useState(false)
-  const [newProp, setNewProp] = useState({ name: '', address: '', city: '', state: 'OH', zip: '', purchasePrice: '', unitCount: '', totalSF: '', occupancyRate: '', avgRentPerUnit: '', operatingExpenses: '', propertyTax: '', insurance: '', notes: '' })
+  const [newProp, setNewProp] = useState({ name: '', address: '', city: '', state: loadSettings().defaultState, zip: '', purchasePrice: '', unitCount: '', totalSF: '', occupancyRate: '', avgRentPerUnit: '', operatingExpenses: '', propertyTax: '', insurance: '', notes: '' })
   const [addFormError, setAddFormError] = useState(null)
   const [sortKey, setSortKey] = useState('purchasePrice')
   const [sortDir, setSortDir] = useState('asc')
@@ -1050,7 +1072,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty }) {
       return
     }
     const p = {
-      id: Date.now(), name: newProp.name.trim(), address: newProp.address.trim() || newProp.city.trim(), city: newProp.city.trim(), state: newProp.state || 'OH', zip: newProp.zip,
+      id: Date.now(), name: newProp.name.trim(), address: newProp.address.trim() || newProp.city.trim(), city: newProp.city.trim(), state: newProp.state || loadSettings().defaultState, zip: newProp.zip,
       purchasePrice: +newProp.purchasePrice, unitCount: +newProp.unitCount, totalSF: +newProp.totalSF || 0,
       occupancyRate: newProp.occupancyRate ? +newProp.occupancyRate / 100 : 0.85, avgRentPerUnit: +newProp.avgRentPerUnit || 0,
       operatingExpenses: +newProp.operatingExpenses || 0, propertyTax: +newProp.propertyTax || 0, insurance: +newProp.insurance || 0,
@@ -1059,7 +1081,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty }) {
     setAddFormError(null)
     setProperties(prev => [...prev, p])
     setShowAddForm(false)
-    setNewProp({ name: '', address: '', city: '', state: 'OH', zip: '', purchasePrice: '', unitCount: '', totalSF: '', occupancyRate: '', avgRentPerUnit: '', operatingExpenses: '', propertyTax: '', insurance: '', notes: '' })
+    setNewProp({ name: '', address: '', city: '', state: loadSettings().defaultState, zip: '', purchasePrice: '', unitCount: '', totalSF: '', occupancyRate: '', avgRentPerUnit: '', operatingExpenses: '', propertyTax: '', insurance: '', notes: '' })
   }
 
   const handleImport = async (imported) => {
@@ -2375,7 +2397,7 @@ function toDbRow(prop) {
     name: prop.name || '',
     address: prop.address || '',
     city: prop.city || '',
-    state: prop.state || 'OH',
+    state: prop.state || loadSettings().defaultState,
     zip: prop.zip || '',
     purchase_price: prop.purchasePrice || 0,
     unit_count: prop.unitCount || 0,
@@ -2401,7 +2423,7 @@ function fromDbRow(row) {
     name: row.name || '',
     address: row.address || '',
     city: row.city || '',
-    state: row.state || 'OH',
+    state: row.state || loadSettings().defaultState,
     zip: row.zip || '',
     purchasePrice: Number(row.purchase_price) || 0,
     unitCount: Number(row.unit_count) || 0,
@@ -2482,10 +2504,90 @@ async function syncAllToDb(properties) {
 }
 
 // ─── MAIN APP ───────────────────────────────────────────────────────────────
+// ─── SETTINGS TAB ───────────────────────────────────────────────────────────
+function SettingsTab({ settings, onSave }) {
+  const [form, setForm] = useState({ ...settings })
+  const [geocoding, setGeocoding] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleGeocode = async () => {
+    if (!form.homeCity) return
+    setGeocoding(true)
+    try {
+      const query = `${form.homeCity}, ${form.homeState} ${form.homeZip}`.trim()
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=us&limit=1`, {
+        headers: { 'User-Agent': 'StorageVault/1.0' }
+      })
+      const data = await resp.json()
+      if (data.length > 0) {
+        setForm(f => ({ ...f, homeLat: parseFloat(parseFloat(data[0].lat).toFixed(4)), homeLng: parseFloat(parseFloat(data[0].lon).toFixed(4)) }))
+      }
+    } catch {}
+    setGeocoding(false)
+  }
+
+  const handleSave = () => {
+    onSave(form)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-6 mb-6">
+        <h3 className="text-lg font-semibold text-navy-900 mb-1">Home Base Location</h3>
+        <p className="text-sm text-navy-500 mb-4">Distances to properties are calculated from this location. This is also the default state for new properties.</p>
+
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-navy-600 mb-1">City</label>
+            <input type="text" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form.homeCity} onChange={e => setForm(f => ({ ...f, homeCity: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-navy-600 mb-1">State</label>
+            <input type="text" maxLength={2} className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase" value={form.homeState} onChange={e => setForm(f => ({ ...f, homeState: e.target.value.toUpperCase(), defaultState: e.target.value.toUpperCase() }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-navy-600 mb-1">Zip</label>
+            <input type="text" maxLength={5} className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form.homeZip} onChange={e => setForm(f => ({ ...f, homeZip: e.target.value }))} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-navy-600 mb-1">Latitude</label>
+            <input type="number" step="0.0001" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-navy-50" value={form.homeLat} onChange={e => setForm(f => ({ ...f, homeLat: parseFloat(e.target.value) || 0 }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-navy-600 mb-1">Longitude</label>
+            <input type="number" step="0.0001" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-navy-50" value={form.homeLng} onChange={e => setForm(f => ({ ...f, homeLng: parseFloat(e.target.value) || 0 }))} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button onClick={handleGeocode} disabled={geocoding || !form.homeCity} className="text-sm px-4 py-2 border border-navy-200 text-navy-700 rounded-lg hover:bg-navy-50 transition disabled:opacity-50">
+            {geocoding ? 'Looking up...' : 'Auto-detect Coordinates'}
+          </button>
+          <span className="text-xs text-navy-400">Updates lat/lng from city, state, zip</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button onClick={handleSave} className="bg-navy-800 text-white text-sm px-6 py-2.5 rounded-lg font-medium hover:bg-navy-900 transition">
+          Save Settings
+        </button>
+        {saved && <span className="text-sm text-emerald-600 font-medium">Saved!</span>}
+      </div>
+    </div>
+  )
+}
+
+// ─── MAIN APP ───────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState(0)
   const [properties, setProperties] = useState([])
   const [selectedProperty, setSelectedProperty] = useState(null)
+  const [settings, setSettings] = useState(loadSettings)
   const [dbLoaded, setDbLoaded] = useState(false)
   // Map local property IDs → Supabase row IDs
   const dbIdMap = useRef({})
@@ -2558,10 +2660,16 @@ export default function App() {
     setSelectedProperty(prev => prev && prev.id === id ? null : prev)
   }, [])
 
+  const handleSaveSettings = (newSettings) => {
+    setSettings(newSettings)
+    saveSettings(newSettings)
+  }
+
   const tabs = [
     { label: 'Buy Box & Deals', icon: '🎯' },
     { label: 'Underwriting', icon: '📊' },
     { label: 'Offer Letters', icon: '📝' },
+    { label: 'Settings', icon: '⚙️' },
   ]
 
   // Dashboard stats
@@ -2617,6 +2725,7 @@ export default function App() {
         {tab === 0 && <BuyBoxTab properties={allProperties} setProperties={handleSetProperties} onSelectProperty={handleSelectProperty} />}
         {tab === 1 && <UnderwritingTab property={selectedProperty} properties={allProperties} onSelectProperty={setSelectedProperty} onUpdateProperty={handleUpdateProperty} onDeleteProperty={handleDeleteProperty} />}
         {tab === 2 && <OfferLettersTab property={selectedProperty} properties={allProperties} onSelectProperty={(p) => { setSelectedProperty(p); setTab(2) }} />}
+        {tab === 3 && <SettingsTab settings={settings} onSave={handleSaveSettings} />}
       </main>
 
       {/* Footer */}
