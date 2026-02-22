@@ -1869,9 +1869,12 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
     }
   }, [address, city, state])
 
+  // A real street address contains a number (e.g. "715 N Sandusky St") —
+  // placeholder values like just the city name ("Dayton") don't count
+  const hasAddress = address && address.trim().length > 0 && /\d/.test(address) && address.trim().toLowerCase() !== (city || '').trim().toLowerCase()
   const runSearch = () => {
     const key = `${address}|${city}|${state}`
-    if (!city) return
+    if (!city || !hasAddress) return
     lastLookup.current = key
     setLoading(true)
     setError(null)
@@ -1966,10 +1969,16 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
       </div>
       {!competitors && !loading && !error && (
         <div className="text-center py-4">
-          <p className="text-sm text-navy-500 mb-3">Search for self-storage competitors within 10 miles using OpenStreetMap data.</p>
-          <button onClick={runSearch} disabled={!city} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            <span>🔍</span> Search Competitors
-          </button>
+          {hasAddress ? (
+            <>
+              <p className="text-sm text-navy-500 mb-3">Search for self-storage competitors within 10 miles using OpenStreetMap data.</p>
+              <button onClick={runSearch} disabled={!city} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <span>🔍</span> Search Competitors
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-navy-400">Add a street address to this property to search for nearby competitors.</p>
+          )}
         </div>
       )}
       {loading && (
