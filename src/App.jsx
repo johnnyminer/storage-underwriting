@@ -190,6 +190,76 @@ async function loadSettingsFromDb() {
   return null
 }
 
+// ─── AREA STORAGE RATES (avg $/unit/month for 10x10, 2025 industry data) ────
+// Sources: StorageCafe, SpareFoot, RentCafe, SROA — Dec 2025
+// City-level rates where available, state averages as fallback
+const STORAGE_RATES = {
+  // City-level rates (city lowercase → avg 10x10 $/mo)
+  cities: {
+    // Ohio
+    'columbus,oh': 92, 'cincinnati,oh': 94, 'cleveland,oh': 88, 'dayton,oh': 84,
+    'akron,oh': 80, 'toledo,oh': 78, 'youngstown,oh': 75,
+    // Indiana
+    'indianapolis,in': 85, 'fort wayne,in': 75, 'evansville,in': 72, 'south bend,in': 78,
+    // Kentucky
+    'louisville,ky': 93, 'lexington,ky': 88, 'bowling green,ky': 78,
+    // West Virginia
+    'charleston,wv': 80, 'morgantown,wv': 82, 'huntington,wv': 75,
+    // Pennsylvania
+    'philadelphia,pa': 139, 'pittsburgh,pa': 120, 'allentown,pa': 95, 'harrisburg,pa': 92,
+    // Major metros
+    'new york,ny': 260, 'los angeles,ca': 269, 'san francisco,ca': 292,
+    'san diego,ca': 180, 'sacramento,ca': 140, 'san jose,ca': 220,
+    'chicago,il': 115, 'houston,tx': 95, 'dallas,tx': 107, 'austin,tx': 100,
+    'san antonio,tx': 97, 'fort worth,tx': 100, 'phoenix,az': 115,
+    'seattle,wa': 192, 'portland,or': 145, 'denver,co': 120, 'miami,fl': 165,
+    'tampa,fl': 110, 'orlando,fl': 108, 'jacksonville,fl': 95,
+    'atlanta,ga': 105, 'charlotte,nc': 98, 'raleigh,nc': 100,
+    'nashville,tn': 105, 'memphis,tn': 75, 'knoxville,tn': 82,
+    'detroit,mi': 110, 'grand rapids,mi': 90, 'minneapolis,mn': 115,
+    'st louis,mo': 89, 'kansas city,mo': 88, 'oklahoma city,ok': 68,
+    'las vegas,nv': 113, 'salt lake city,ut': 105, 'boise,id': 95,
+    'boston,ma': 222, 'washington,dc': 175, 'baltimore,md': 125,
+    'richmond,va': 100, 'virginia beach,va': 105,
+    'columbia,sc': 99, 'charleston,sc': 110,
+    'birmingham,al': 70, 'montgomery,al': 50,
+    'new orleans,la': 85, 'baton rouge,la': 80,
+    'milwaukee,wi': 80, 'madison,wi': 90,
+    'des moines,ia': 75, 'omaha,ne': 78,
+    'little rock,ar': 72, 'jackson,ms': 65,
+    'honolulu,hi': 297, 'anchorage,ak': 130,
+    'albuquerque,nm': 85, 'tucson,az': 95,
+  },
+  // State-level averages (fallback)
+  states: {
+    'OH': 88, 'IN': 80, 'KY': 85, 'WV': 78, 'PA': 110,
+    'NY': 180, 'NJ': 150, 'CT': 145, 'MA': 160, 'RI': 135,
+    'NH': 110, 'VT': 100, 'ME': 95,
+    'CA': 195, 'WA': 150, 'OR': 125, 'HI': 220, 'AK': 120,
+    'TX': 95, 'FL': 110, 'GA': 95, 'NC': 95, 'SC': 95,
+    'VA': 100, 'MD': 120, 'DC': 175, 'DE': 110,
+    'TN': 85, 'AL': 68, 'MS': 62, 'LA': 80, 'AR': 70,
+    'IL': 100, 'MI': 95, 'MN': 100, 'WI': 82, 'IA': 72,
+    'MO': 85, 'OK': 65, 'KS': 75, 'NE': 75, 'SD': 70, 'ND': 72,
+    'CO': 115, 'AZ': 105, 'NV': 110, 'UT': 100, 'NM': 82,
+    'ID': 88, 'MT': 80, 'WY': 75,
+  },
+  national: 119, // National average 10x10 (Dec 2025)
+}
+
+// Get estimated area rate for a city/state combo
+function getAreaRate(city, state) {
+  if (city && state) {
+    const key = `${city.trim().toLowerCase()},${state.trim().toLowerCase()}`
+    if (STORAGE_RATES.cities[key]) return { rate: STORAGE_RATES.cities[key], source: `${city}, ${state} avg` }
+  }
+  if (state) {
+    const st = state.trim().toUpperCase()
+    if (STORAGE_RATES.states[st]) return { rate: STORAGE_RATES.states[st], source: `${st} state avg` }
+  }
+  return { rate: STORAGE_RATES.national, source: 'National avg' }
+}
+
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3959 // Earth radius in miles
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -1287,10 +1357,19 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty }) {
               ].map(([key, label, type]) => {
                 const isRequired = ['name', 'city', 'purchasePrice', 'unitCount'].includes(key)
                 const hasError = addFormError && isRequired && (!newProp[key] || (type === 'number' && +newProp[key] <= 0))
+                const est = key === 'avgRentPerUnit' ? getAreaRate(newProp.city, newProp.state || loadSettings().defaultState) : null
                 return (
                   <div key={key}>
                     <label className="block text-xs font-medium text-navy-600 mb-1">{label}</label>
-                    <input type={type} className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none ${hasError ? 'border-red-400 bg-red-50' : 'border-navy-200'}`} value={newProp[key]} onChange={e => { setNewProp(p => ({ ...p, [key]: e.target.value })); if (addFormError) setAddFormError(null) }} placeholder={type === 'number' && isRequired ? 'Required' : ''} />
+                    <div className={key === 'avgRentPerUnit' ? 'flex gap-1' : ''}>
+                      <input type={type} className={`${key === 'avgRentPerUnit' ? 'flex-1' : 'w-full'} border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none ${hasError ? 'border-red-400 bg-red-50' : 'border-navy-200'}`} value={newProp[key]} onChange={e => { setNewProp(p => ({ ...p, [key]: e.target.value })); if (addFormError) setAddFormError(null) }} placeholder={type === 'number' && isRequired ? 'Required' : est ? `~$${est.rate}` : ''} />
+                      {est && (
+                        <button type="button" onClick={() => setNewProp(p => ({ ...p, avgRentPerUnit: est.rate }))} title={`Use ${est.source}: $${est.rate}/mo`} className="px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition whitespace-nowrap">
+                          ~${est.rate}
+                        </button>
+                      )}
+                    </div>
+                    {est && <p className="text-xs text-navy-400 mt-0.5">{est.source} (2025 data)</p>}
                   </div>
                 )
               })}
@@ -2228,7 +2307,33 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
             ['purchasePrice', 'Purchase Price ($)', 'number'],
             ['unitCount', 'Units', 'number'],
             ['totalSF', 'Total SF', 'number'],
-            ['avgRentPerUnit', 'Avg Rent/Unit ($/mo)', 'number'],
+          ].map(([key, label]) => (
+            <div key={key}>
+              <label className="block text-xs font-medium text-navy-500 mb-1">{label}</label>
+              <input type="number" step="1" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={prop[key]} onChange={e => handlePropEdit(key, +e.target.value)} />
+            </div>
+          ))}
+          {/* Avg Rent/Unit with area rate estimate */}
+          <div>
+            <label className="block text-xs font-medium text-navy-500 mb-1">Avg Rent/Unit ($/mo)</label>
+            <div className="flex gap-1">
+              <input type="number" step="1" className="flex-1 border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={prop.avgRentPerUnit} onChange={e => handlePropEdit('avgRentPerUnit', +e.target.value)} />
+              {(() => {
+                const est = getAreaRate(prop.city, prop.state)
+                return (
+                  <button
+                    onClick={() => handlePropEdit('avgRentPerUnit', est.rate)}
+                    title={`Use ${est.source}: $${est.rate}/mo (2025 industry data)`}
+                    className="px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition whitespace-nowrap"
+                  >
+                    ~${est.rate}
+                  </button>
+                )
+              })()}
+            </div>
+            <p className="text-xs text-navy-400 mt-0.5">{getAreaRate(prop.city, prop.state).source} (2025)</p>
+          </div>
+          {[
             ['occupancyRate', 'Occupancy Rate', 'number'],
             ['operatingExpenses', 'Operating Expenses ($/yr)', 'number'],
             ['propertyTax', 'Property Tax ($/yr)', 'number'],
