@@ -1079,11 +1079,13 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
   const filtered = useMemo(() => {
     return properties.filter(p => {
       const dist = getDistance(p)
+      const distKnown = dist < 999 // Don't filter out properties with unknown distance
       const uw = runUnderwriting(p)
+      const hasIncome = p.avgRentPerUnit > 0 // Don't filter on cap rate if no rent data yet
       return p.purchasePrice <= criteria.maxPrice
-        && dist <= criteria.maxDistance
+        && (!distKnown || dist <= criteria.maxDistance)
         && p.unitCount >= criteria.minUnits
-        && uw.capRate >= criteria.minCapRate / 100
+        && (!hasIncome || uw.capRate >= criteria.minCapRate / 100)
         && p.occupancyRate >= criteria.minOccupancy / 100
     }).sort((a, b) => {
       let av = a[sortKey], bv = b[sortKey]
