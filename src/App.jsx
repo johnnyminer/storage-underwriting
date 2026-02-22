@@ -75,7 +75,7 @@ function parseCSV(text) {
     }
 
     if (!prop.purchasePrice) {
-      errors.push(`Row ${i + 1} (${prop.name}): Missing purchase price — skipped.`)
+      errors.push(`Row ${i + 1} (${prop.name}): Missing listing price — skipped.`)
       continue
     }
     if (!prop.unitCount) {
@@ -1062,7 +1062,7 @@ function ScrapeURLModal({ onImport, onClose }) {
   const fieldDefs = [
     ['name', 'Property Name', 'text'], ['address', 'Street Address', 'text'],
     ['city', 'City', 'text'], ['state', 'State', 'text'], ['zip', 'Zip', 'text'],
-    ['purchasePrice', 'Purchase Price ($)', 'number'], ['unitCount', 'Units', 'number'],
+    ['purchasePrice', 'Listing Price ($)', 'number'], ['unitCount', 'Units', 'number'],
     ['totalSF', 'Total Sq Ft', 'number'], ['occupancyRate', 'Occupancy (0-1)', 'number'],
     ['avgRentPerUnit', 'Avg Rent/Unit ($/mo)', 'number'],
     ['operatingExpenses', 'Operating Expenses ($/yr)', 'number'],
@@ -1253,7 +1253,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty }) {
     const missing = []
     if (!newProp.name.trim()) missing.push('Property Name')
     if (!newProp.city.trim()) missing.push('City')
-    if (!newProp.purchasePrice || +newProp.purchasePrice <= 0) missing.push('Purchase Price')
+    if (!newProp.purchasePrice || +newProp.purchasePrice <= 0) missing.push('Listing Price')
     if (!newProp.unitCount || +newProp.unitCount <= 0) missing.push('Unit Count')
     if (missing.length > 0) {
       setAddFormError(`Please fill in: ${missing.join(', ')}`)
@@ -1425,7 +1425,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty }) {
             )}
             <div className="grid grid-cols-2 gap-3">
               {[
-                ['name', 'Property Name *', 'text'], ['address', 'Street Address', 'text'], ['city', 'City *', 'text'], ['zip', 'Zip Code', 'text'], ['purchasePrice', 'Purchase Price ($) *', 'number'],
+                ['name', 'Property Name *', 'text'], ['address', 'Street Address', 'text'], ['city', 'City *', 'text'], ['zip', 'Zip Code', 'text'], ['purchasePrice', 'Listing Price ($) *', 'number'],
                 ['unitCount', 'Unit Count *', 'number'], ['totalSF', 'Total Sq Ft', 'number'], ['occupancyRate', 'Occupancy (%)', 'number'], ['avgRentPerUnit', 'Avg Rent/Unit ($/mo)', 'number'],
                 ['operatingExpenses', 'Operating Expenses ($/yr)', 'number'], ['propertyTax', 'Property Tax ($/yr)', 'number'], ['insurance', 'Insurance ($/yr)', 'number'],
               ].map(([key, label, type]) => {
@@ -2378,7 +2378,7 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
             <input type="text" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={prop.zip || ''} onChange={e => handlePropEdit('zip', e.target.value)} />
           </div>
           {[
-            ['purchasePrice', 'Purchase Price ($)', 'number'],
+            ['purchasePrice', 'Listing Price ($)', 'number'],
             ['unitCount', 'Units', 'number'],
             ['totalSF', 'Total SF', 'number'],
           ].map(([key, label]) => (
@@ -2448,7 +2448,7 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
         <MetricCard label="Gross Potential Income" value={fmt(uw.gpi)} sub="Annual (100% occupied)" />
         <MetricCard label="Effective Gross Income" value={fmt(uw.egi)} sub={`At ${pct(prop.occupancyRate)} occupancy`} />
         <MetricCard label="Net Operating Income" value={fmt(uw.noi)} color={uw.noi > 0 ? "text-emerald-600" : "text-red-600"} sub="After all expenses" />
-        <MetricCard label="Cap Rate" value={pct(uw.capRate)} color={uw.capRate >= 0.07 ? "text-emerald-600" : uw.capRate >= 0.06 ? "text-amber-600" : "text-red-600"} sub="NOI / Purchase Price" />
+        <MetricCard label="Cap Rate" value={pct(uw.capRate)} color={uw.capRate >= 0.07 ? "text-emerald-600" : uw.capRate >= 0.06 ? "text-amber-600" : "text-red-600"} sub="NOI / Listing Price" />
         <MetricCard label="Expense Ratio" value={pct(uw.expenseRatio)} color={uw.expenseRatio <= 0.35 ? "text-emerald-600" : uw.expenseRatio <= 0.40 ? "text-amber-600" : "text-red-600"} sub="Expenses / EGI" />
         <MetricCard label="Cash-on-Cash" value={pct(uw.scenarios[2].cashOnCash)} color={uw.scenarios[2].cashOnCash >= 0.08 ? "text-emerald-600" : uw.scenarios[2].cashOnCash >= 0 ? "text-amber-600" : "text-red-600"} sub="Conventional scenario" />
         <MetricCard label="Break-even Occ." value={pct(uw.breakEvenOcc)} color={uw.breakEvenOcc <= 0.60 ? "text-emerald-600" : uw.breakEvenOcc <= 0.75 ? "text-amber-600" : "text-red-600"} sub="Min occupancy for NOI > 0" />
