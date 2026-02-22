@@ -2479,21 +2479,30 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
         {/* Editable NOI — click to enter listed/agent NOI */}
         <div className="bg-white rounded-xl border border-navy-100 p-3 shadow-sm">
           <p className="text-xs text-navy-500 mb-1 font-medium">Net Operating Income</p>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-navy-400">$</span>
+          <div className="flex items-center gap-1">
+            <span className="text-lg font-bold" style={{ color: uw.noi > 0 ? '#059669' : '#dc2626' }}>{fmt(uw.noi)}</span>
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <label className="text-xs text-navy-500 whitespace-nowrap">Listed NOI:</label>
             <input
               type="number"
-              className="w-full text-lg font-bold bg-transparent border-b border-dashed border-navy-300 focus:border-blue-500 focus:outline-none py-0.5"
-              style={{ color: uw.noi > 0 ? '#059669' : '#dc2626' }}
-              value={prop.noiOverride != null && prop.noiOverride !== '' ? prop.noiOverride : ''}
-              placeholder={fmt(uw.calcNoi).replace('$', '')}
-              onChange={e => handlePropEdit('noiOverride', e.target.value === '' ? '' : +e.target.value)}
+              step="1"
+              className="flex-1 border border-navy-200 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              value={prop.noiOverride ?? ''}
+              placeholder="Enter agent/listed NOI"
+              onChange={e => {
+                const raw = e.target.value
+                handlePropEdit('noiOverride', raw === '' ? '' : Number(raw))
+              }}
             />
+            {uw.noiSource === 'listed' && (
+              <button onClick={() => handlePropEdit('noiOverride', '')} className="text-xs text-red-500 hover:text-red-700 whitespace-nowrap">Clear</button>
+            )}
           </div>
           <p className="text-xs text-navy-400 mt-1">
             {uw.noiSource === 'listed'
-              ? <span className="text-blue-600">Listed NOI — <button className="underline hover:text-blue-800" onClick={() => handlePropEdit('noiOverride', '')}>use calculated</button></span>
-              : <span>Calculated — enter agent/listed NOI above</span>}
+              ? <span className="text-blue-600">Using listed NOI (calc: {fmt(uw.calcNoi)})</span>
+              : <span>Using calculated NOI</span>}
           </p>
         </div>
         <MetricCard label="Cap Rate" value={pct(uw.capRate)} color={uw.capRate >= 0.07 ? "text-emerald-600" : uw.capRate >= 0.06 ? "text-amber-600" : "text-red-600"} sub={uw.noiSource === 'listed' ? 'Listed NOI / Listing Price' : 'NOI / Listing Price'} />
