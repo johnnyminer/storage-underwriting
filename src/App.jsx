@@ -245,13 +245,87 @@ const STORAGE_RATES = {
     'ID': 88, 'MT': 80, 'WY': 75,
   },
   national: 119, // National average 10x10 (Dec 2025)
+  // Metro area mappings: smaller city → nearest major city for rate lookup
+  metros: {
+    // Dayton metro (OH)
+    'fairborn,oh': 'dayton,oh', 'beavercreek,oh': 'dayton,oh', 'kettering,oh': 'dayton,oh',
+    'huber heights,oh': 'dayton,oh', 'xenia,oh': 'dayton,oh', 'troy,oh': 'dayton,oh',
+    'miamisburg,oh': 'dayton,oh', 'centerville,oh': 'dayton,oh', 'springboro,oh': 'dayton,oh',
+    'tipp city,oh': 'dayton,oh', 'vandalia,oh': 'dayton,oh', 'englewood,oh': 'dayton,oh',
+    'piqua,oh': 'dayton,oh', 'greenville,oh': 'dayton,oh', 'wilmington,oh': 'dayton,oh',
+    // Columbus metro (OH)
+    'dublin,oh': 'columbus,oh', 'westerville,oh': 'columbus,oh', 'grove city,oh': 'columbus,oh',
+    'hilliard,oh': 'columbus,oh', 'reynoldsburg,oh': 'columbus,oh', 'gahanna,oh': 'columbus,oh',
+    'powell,oh': 'columbus,oh', 'pickerington,oh': 'columbus,oh', 'lancaster,oh': 'columbus,oh',
+    'delaware,oh': 'columbus,oh', 'marysville,oh': 'columbus,oh', 'newark,oh': 'columbus,oh',
+    'mt vernon,oh': 'columbus,oh', 'mount vernon,oh': 'columbus,oh', 'zanesville,oh': 'columbus,oh',
+    'circleville,oh': 'columbus,oh', 'heath,oh': 'columbus,oh', 'pataskala,oh': 'columbus,oh',
+    // Cincinnati metro (OH/KY/IN)
+    'mason,oh': 'cincinnati,oh', 'hamilton,oh': 'cincinnati,oh', 'fairfield,oh': 'cincinnati,oh',
+    'middletown,oh': 'cincinnati,oh', 'west chester,oh': 'cincinnati,oh', 'springfield,oh': 'cincinnati,oh',
+    'florence,ky': 'cincinnati,oh', 'covington,ky': 'cincinnati,oh', 'newport,ky': 'cincinnati,oh',
+    // Cleveland metro (OH)
+    'parma,oh': 'cleveland,oh', 'lakewood,oh': 'cleveland,oh', 'elyria,oh': 'cleveland,oh',
+    'mentor,oh': 'cleveland,oh', 'strongsville,oh': 'cleveland,oh', 'medina,oh': 'cleveland,oh',
+    'lorain,oh': 'cleveland,oh', 'brunswick,oh': 'cleveland,oh', 'wooster,oh': 'cleveland,oh',
+    // Akron/Canton (OH)
+    'canton,oh': 'akron,oh', 'massillon,oh': 'akron,oh', 'barberton,oh': 'akron,oh',
+    'kent,oh': 'akron,oh', 'wadsworth,oh': 'akron,oh', 'stow,oh': 'akron,oh',
+    // Toledo (OH)
+    'findlay,oh': 'toledo,oh', 'bowling green,oh': 'toledo,oh', 'fremont,oh': 'toledo,oh',
+    'defiance,oh': 'toledo,oh', 'lima,oh': 'toledo,oh', 'sandusky,oh': 'toledo,oh',
+    // Indianapolis metro (IN)
+    'carmel,in': 'indianapolis,in', 'fishers,in': 'indianapolis,in', 'noblesville,in': 'indianapolis,in',
+    'greenwood,in': 'indianapolis,in', 'plainfield,in': 'indianapolis,in', 'avon,in': 'indianapolis,in',
+    'anderson,in': 'indianapolis,in', 'muncie,in': 'indianapolis,in', 'kokomo,in': 'indianapolis,in',
+    // Louisville metro (KY/IN)
+    'elizabethtown,ky': 'louisville,ky', 'frankfort,ky': 'louisville,ky',
+    'shelbyville,ky': 'louisville,ky', 'jeffersonville,in': 'louisville,ky',
+    // Pittsburgh metro (PA)
+    'cranberry township,pa': 'pittsburgh,pa', 'monroeville,pa': 'pittsburgh,pa',
+    'bethel park,pa': 'pittsburgh,pa', 'washington,pa': 'pittsburgh,pa',
+    'wheeling,wv': 'pittsburgh,pa', 'weirton,wv': 'pittsburgh,pa',
+    // Other major metros
+    'arlington,tx': 'dallas,tx', 'plano,tx': 'dallas,tx', 'frisco,tx': 'dallas,tx',
+    'mckinney,tx': 'dallas,tx', 'irving,tx': 'dallas,tx', 'denton,tx': 'dallas,tx',
+    'round rock,tx': 'austin,tx', 'san marcos,tx': 'austin,tx',
+    'the woodlands,tx': 'houston,tx', 'sugar land,tx': 'houston,tx', 'katy,tx': 'houston,tx',
+    'mesa,az': 'phoenix,az', 'chandler,az': 'phoenix,az', 'scottsdale,az': 'phoenix,az',
+    'tempe,az': 'phoenix,az', 'gilbert,az': 'phoenix,az', 'glendale,az': 'phoenix,az',
+    'aurora,co': 'denver,co', 'lakewood,co': 'denver,co', 'westminster,co': 'denver,co',
+    'fort lauderdale,fl': 'miami,fl', 'hialeah,fl': 'miami,fl', 'coral springs,fl': 'miami,fl',
+    'st petersburg,fl': 'tampa,fl', 'clearwater,fl': 'tampa,fl', 'brandon,fl': 'tampa,fl',
+    'marietta,ga': 'atlanta,ga', 'roswell,ga': 'atlanta,ga', 'alpharetta,ga': 'atlanta,ga',
+    'decatur,ga': 'atlanta,ga', 'kennesaw,ga': 'atlanta,ga', 'sandy springs,ga': 'atlanta,ga',
+    'bellevue,wa': 'seattle,wa', 'tacoma,wa': 'seattle,wa', 'everett,wa': 'seattle,wa',
+    'jersey city,nj': 'new york,ny', 'newark,nj': 'new york,ny', 'yonkers,ny': 'new york,ny',
+    'stamford,ct': 'new york,ny', 'white plains,ny': 'new york,ny',
+    'cambridge,ma': 'boston,ma', 'somerville,ma': 'boston,ma', 'quincy,ma': 'boston,ma',
+    'brockton,ma': 'boston,ma', 'worcester,ma': 'boston,ma', 'providence,ri': 'boston,ma',
+    'long beach,ca': 'los angeles,ca', 'anaheim,ca': 'los angeles,ca', 'irvine,ca': 'los angeles,ca',
+    'oakland,ca': 'san francisco,ca', 'berkeley,ca': 'san francisco,ca', 'fremont,ca': 'san francisco,ca',
+    'st paul,mn': 'minneapolis,mn', 'bloomington,mn': 'minneapolis,mn',
+    'overland park,ks': 'kansas city,mo', 'olathe,ks': 'kansas city,mo',
+    'henderson,nv': 'las vegas,nv', 'north las vegas,nv': 'las vegas,nv',
+    'arlington,va': 'washington,dc', 'alexandria,va': 'washington,dc', 'fairfax,va': 'washington,dc',
+    'bethesda,md': 'washington,dc', 'silver spring,md': 'washington,dc', 'rockville,md': 'washington,dc',
+    'durham,nc': 'raleigh,nc', 'cary,nc': 'raleigh,nc', 'chapel hill,nc': 'raleigh,nc',
+    'gastonia,nc': 'charlotte,nc', 'concord,nc': 'charlotte,nc', 'rock hill,sc': 'charlotte,nc',
+  },
 }
 
 // Get estimated area rate for a city/state combo
 function getAreaRate(city, state) {
   if (city && state) {
     const key = `${city.trim().toLowerCase()},${state.trim().toLowerCase()}`
+    // Direct city match
     if (STORAGE_RATES.cities[key]) return { rate: STORAGE_RATES.cities[key], source: `${city}, ${state} avg` }
+    // Metro area match (suburb → nearest major city)
+    const metro = STORAGE_RATES.metros[key]
+    if (metro && STORAGE_RATES.cities[metro]) {
+      const metroCity = metro.split(',')[0].replace(/\b\w/g, c => c.toUpperCase())
+      return { rate: STORAGE_RATES.cities[metro], source: `${metroCity} metro avg` }
+    }
   }
   if (state) {
     const st = state.trim().toUpperCase()
