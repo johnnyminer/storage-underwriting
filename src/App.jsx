@@ -1065,7 +1065,7 @@ function ScrapeURLModal({ onImport, onClose }) {
 // ─── BUY BOX TAB ────────────────────────────────────────────────────────────
 function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount, onClearImported }) {
   const [criteria, setCriteria] = useState({
-    maxPrice: 1000000, maxDistance: 120, minUnits: 0, minCapRate: 0, minOccupancy: 0
+    maxPrice: '', maxDistance: '', minUnits: '', minCapRate: '', minOccupancy: ''
   })
   const [showAddForm, setShowAddForm] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -1076,26 +1076,43 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
   const [sortDir, setSortDir] = useState('asc')
   const [geocodingStatus, setGeocodingStatus] = useState(null)
 
-  const filtered = useMemo(() => {
-    return properties.filter(p => {
-      const dist = getDistance(p)
-      const distKnown = dist < 999 // Don't filter out properties with unknown distance
-      const uw = runUnderwriting(p)
-      const hasIncome = p.avgRentPerUnit > 0 // Don't filter on cap rate if no rent data yet
-      return p.purchasePrice <= criteria.maxPrice
-        && (!distKnown || dist <= criteria.maxDistance)
-        && p.unitCount >= criteria.minUnits
-        && (!hasIncome || uw.capRate >= criteria.minCapRate / 100)
-        && p.occupancyRate >= criteria.minOccupancy / 100
-    }).sort((a, b) => {
-      let av = a[sortKey], bv = b[sortKey]
-      if (sortKey === 'capRate') {
-        av = runUnderwriting(a).capRate
-        bv = runUnderwriting(b).capRate
-      }
-      if (typeof av === 'string') { av = av.toLowerCase(); bv = (bv || '').toLowerCase() }
-      return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
-    })
+  // Check if any filter is actively set (non-empty)
+  const hasActiveFilters = Object.values(criteria).some(v => v !== '' && v !== null && v !== undefined)
+
+  const sortFn = (a, b) => {
+    let av = a[sortKey], bv = b[sortKey]
+    if (sortKey === 'capRate') {
+      av = runUnderwriting(a).capRate
+      bv = runUnderwriting(b).capRate
+    }
+    if (typeof av === 'string') { av = av.toLowerCase(); bv = (bv || '').toLowerCase() }
+    return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
+  }
+
+  const matchesFilter = (p) => {
+    const dist = getDistance(p)
+    const distKnown = dist < 999
+    const uw = runUnderwriting(p)
+    const hasIncome = p.avgRentPerUnit > 0
+    const maxPrice = criteria.maxPrice !== '' ? +criteria.maxPrice : Infinity
+    const maxDist = criteria.maxDistance !== '' ? +criteria.maxDistance : Infinity
+    const minUnits = criteria.minUnits !== '' ? +criteria.minUnits : 0
+    const minCap = criteria.minCapRate !== '' ? +criteria.minCapRate / 100 : -Infinity
+    const minOcc = criteria.minOccupancy !== '' ? +criteria.minOccupancy / 100 : 0
+    return p.purchasePrice <= maxPrice
+      && (!distKnown || dist <= maxDist)
+      && p.unitCount >= minUnits
+      && (!hasIncome || uw.capRate >= minCap)
+      && p.occupancyRate >= minOcc
+  }
+
+  const { matched, unmatched } = useMemo(() => {
+    const m = [], u = []
+    for (const p of properties) {
+      if (matchesFilter(p)) m.push(p)
+      else u.push(p)
+    }
+    return { matched: m.sort(sortFn), unmatched: u.sort(sortFn) }
   }, [properties, criteria, sortKey, sortDir])
 
   const handleSort = (key) => {
@@ -1164,26 +1181,18 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
       <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-6 mb-6">
         <h3 className="text-lg font-semibold text-navy-900 mb-4">Define Your Buy Box</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-navy-600 mb-1">Max Price</label>
-            <input type="number" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={criteria.maxPrice} onChange={e => setCriteria(c => ({ ...c, maxPrice: +e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-navy-600 mb-1">Max Distance (mi)</label>
-            <input type="number" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={criteria.maxDistance} onChange={e => setCriteria(c => ({ ...c, maxDistance: +e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-navy-600 mb-1">Min Units</label>
-            <input type="number" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={criteria.minUnits} onChange={e => setCriteria(c => ({ ...c, minUnits: +e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-navy-600 mb-1">Min Cap Rate (%)</label>
-            <input type="number" step="0.5" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={criteria.minCapRate} onChange={e => setCriteria(c => ({ ...c, minCapRate: +e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-navy-600 mb-1">Min Occupancy (%)</label>
-            <input type="number" step="1" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={criteria.minOccupancy} onChange={e => setCriteria(c => ({ ...c, minOccupancy: +e.target.value }))} />
-          </div>
+          {[
+            ['maxPrice', 'Max Price', null],
+            ['maxDistance', 'Max Distance (mi)', null],
+            ['minUnits', 'Min Units', null],
+            ['minCapRate', 'Min Cap Rate (%)', '0.5'],
+            ['minOccupancy', 'Min Occupancy (%)', '1'],
+          ].map(([key, label, step]) => (
+            <div key={key}>
+              <label className="block text-xs font-medium text-navy-600 mb-1">{label}</label>
+              <input type="number" step={step || undefined} placeholder="N/A" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-navy-300" value={criteria[key]} onChange={e => setCriteria(c => ({ ...c, [key]: e.target.value === '' ? '' : e.target.value }))} />
+            </div>
+          ))}
         </div>
       </div>
 
@@ -1191,7 +1200,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
       <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-hidden mb-6">
         <div className="flex items-center justify-between px-6 py-4 border-b border-navy-100 flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            <h3 className="text-lg font-semibold text-navy-900">{filtered.length} Properties Match</h3>
+            <h3 className="text-lg font-semibold text-navy-900">{hasActiveFilters ? `${matched.length} of ${properties.length} Match` : `${properties.length} Properties`}</h3>
             {importedCount > 0 && (
               <span className="text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">{importedCount} imported</span>
             )}
@@ -1220,7 +1229,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
               </tr>
             </thead>
             <tbody className="divide-y divide-navy-100">
-              {filtered.map(p => {
+              {matched.map(p => {
                 const uw = runUnderwriting(p)
                 return (
                   <tr key={p.id} className="hover:bg-navy-50 transition">
@@ -1243,8 +1252,41 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
                   </tr>
                 )
               })}
-              {filtered.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-navy-400">No properties match your criteria. Try adjusting the filters above.</td></tr>
+              {hasActiveFilters && matched.length === 0 && (
+                <tr><td colSpan={9} className="px-4 py-6 text-center text-navy-400">No properties match your Buy Box criteria.</td></tr>
+              )}
+              {hasActiveFilters && unmatched.length > 0 && (
+                <tr className="bg-navy-50/50">
+                  <td colSpan={9} className="px-4 py-2 text-xs font-semibold text-navy-400 uppercase tracking-wide">
+                    Outside Buy Box ({unmatched.length})
+                  </td>
+                </tr>
+              )}
+              {hasActiveFilters && unmatched.map(p => {
+                const uw = runUnderwriting(p)
+                return (
+                  <tr key={p.id} className="hover:bg-navy-50 transition opacity-50">
+                    <td className="px-4 py-3 font-medium text-navy-900">
+                      <div className="flex items-center gap-1.5">
+                        {p.name}
+                        {p.imported && <span className="inline-block w-1.5 h-1.5 bg-purple-500 rounded-full" title="Imported"></span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-navy-500 text-xs max-w-[200px] truncate" title={p.address}>{p.address}</td>
+                    <td className="px-4 py-3 text-navy-600">{p.city}, {p.state}</td>
+                    <td className="px-4 py-3 font-medium">{fmt(p.purchasePrice)}</td>
+                    <td className="px-4 py-3">{p.unitCount}</td>
+                    <td className="px-4 py-3">{pct(p.occupancyRate)}</td>
+                    <td className="px-4 py-3 font-medium">{pct(uw.capRate)}</td>
+                    <td className="px-4 py-3"><Badge text={uw.verdict} variant={uw.verdict === 'PASS' ? 'pass' : uw.verdict === 'FAIL' ? 'fail' : 'pending'} /></td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => onSelectProperty(p)} className="text-blue-600 hover:text-blue-800 text-xs font-semibold">Underwrite →</button>
+                    </td>
+                  </tr>
+                )
+              })}
+              {properties.length === 0 && (
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-navy-400">No properties yet. Add one above to get started.</td></tr>
               )}
             </tbody>
           </table>
