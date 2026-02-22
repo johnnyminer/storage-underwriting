@@ -1600,15 +1600,20 @@ function polygonAreaSqM(coords) {
 }
 
 async function fetchCompetitors(lat, lng) {
-  const query = `[out:json][timeout:25];
+  const r = MILES_10_IN_METERS
+  const query = `[out:json][timeout:30];
 (
-  nwr["self_storage"](around:${MILES_10_IN_METERS},${lat},${lng});
-  nwr["amenity"="self_storage"](around:${MILES_10_IN_METERS},${lat},${lng});
-  nwr["shop"="storage_rental"](around:${MILES_10_IN_METERS},${lat},${lng});
-  nwr["industrial"="self_storage"](around:${MILES_10_IN_METERS},${lat},${lng});
-  nwr["name"~"[Ss]elf.?[Ss]torage|[Ss]torage [Uu]nit|[Ss]torage [Ff]acilit|Mini.?[Ss]torage|STORAGE"](around:${MILES_10_IN_METERS},${lat},${lng})["building"];
+  nwr["self_storage"](around:${r},${lat},${lng});
+  nwr["amenity"="self_storage"](around:${r},${lat},${lng});
+  nwr["shop"="storage_rental"](around:${r},${lat},${lng});
+  nwr["industrial"="self_storage"](around:${r},${lat},${lng});
+  nwr["landuse"="self_storage"](around:${r},${lat},${lng});
+  nwr["building"="self_storage"](around:${r},${lat},${lng});
+  nwr["self_storage"="yes"](around:${r},${lat},${lng});
+  nwr["storage_type"~"self_storage|self-storage"](around:${r},${lat},${lng});
+  nwr["name"~"[Ss]elf.?[Ss]torage|[Ss]torage [Uu]nit|[Ss]torage [Ff]acilit|Mini.?[Ss]torage|STORAGE|Public Storage|Extra Space|CubeSmart|Life Storage|Uncle Bob|U-Haul.*Storage|StorQuest|SecurCare|SmartStop|Stor-?All|National Storage|Prime Storage|Simply Self Storage|Budget Self Storage|Store ?Here|EZ Storage|A-1 Storage|All American Storage|Stor-?It|Storage Sense|iStorage|Devon Self Storage|Compass Self Storage|Great Value Storage|Midgard Self Storage|StorPlace|Space Shop|Affordable Storage",i](around:${r},${lat},${lng});
 );
-out geom 200;`
+out geom 300;`
 
   // Try primary server, fallback to alternative if it fails
   let data
@@ -1688,10 +1693,19 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
   const [error, setError] = useState(null)
   const lastLookup = useRef('')
 
+  // Reset results when the property changes
   useEffect(() => {
     const key = `${address}|${city}|${state}`
-    if (key === lastLookup.current) return
-    if (!city) { setCompetitors(null); return }
+    if (key !== lastLookup.current) {
+      setCompetitors(null)
+      setError(null)
+      lastLookup.current = ''
+    }
+  }, [address, city, state])
+
+  const runSearch = () => {
+    const key = `${address}|${city}|${state}`
+    if (!city) return
     lastLookup.current = key
     setLoading(true)
     setError(null)
@@ -1707,7 +1721,7 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
       })
       .catch(err => setError(`Failed to fetch competitor data: ${err.message}`))
       .finally(() => setLoading(false))
-  }, [address, city, state])
+  }
 
   const within5 = competitors?.filter(c => c.dist <= 5) || []
   const within10 = competitors?.filter(c => c.dist > 5 && c.dist <= 10) || []
@@ -1765,19 +1779,37 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
     <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-6 mb-6">
       <div className="flex items-center justify-between mb-4">
         <h4 className="text-sm font-semibold text-navy-700 uppercase tracking-wide">Competitors</h4>
-        {competitors && (
-          <span className="text-xs text-navy-400 bg-navy-50 px-2 py-1 rounded">
-            {(within5.length + within10.length)} found via OpenStreetMap
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {competitors && (
+            <span className="text-xs text-navy-400 bg-navy-50 px-2 py-1 rounded">
+              {(within5.length + within10.length)} found via OpenStreetMap
+            </span>
+          )}
+          {competitors && !loading && (
+            <button onClick={runSearch} className="text-xs text-blue-600 hover:text-blue-800 underline">Re-run</button>
+          )}
+        </div>
       </div>
+      {!competitors && !loading && !error && (
+        <div className="text-center py-4">
+          <p className="text-sm text-navy-500 mb-3">Search for self-storage competitors within 10 miles using OpenStreetMap data.</p>
+          <button onClick={runSearch} disabled={!city} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            <span>🔍</span> Search Competitors
+          </button>
+        </div>
+      )}
       {loading && (
         <div className="flex items-center gap-2 text-navy-500 text-sm">
           <div className="animate-spin w-4 h-4 border-2 border-navy-300 border-t-blue-500 rounded-full" />
           Searching for storage facilities near {city}, {state}...
         </div>
       )}
-      {error && !loading && <p className="text-sm text-navy-400">{error}</p>}
+      {error && !loading && (
+        <div className="text-center py-2">
+          <p className="text-sm text-navy-400 mb-2">{error}</p>
+          <button onClick={runSearch} className="text-sm text-blue-600 hover:text-blue-800 underline">Try again</button>
+        </div>
+      )}
       {competitors && !loading && (
         <div>
           {/* Summary cards */}
