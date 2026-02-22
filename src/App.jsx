@@ -1065,8 +1065,8 @@ function ScrapeURLModal({ onImport, onClose }) {
     ['purchasePrice', 'Listing Price ($)', 'number'], ['unitCount', 'Units', 'number'],
     ['totalSF', 'Total Sq Ft', 'number'], ['occupancyRate', 'Occupancy (0-1)', 'number'],
     ['avgRentPerUnit', 'Avg Rent/Unit ($/mo)', 'number'],
-    ['operatingExpenses', 'Operating Expenses ($/yr)', 'number'],
     ['propertyTax', 'Property Tax ($/yr)', 'number'], ['insurance', 'Insurance ($/yr)', 'number'],
+    ['operatingExpenses', 'Other OpEx ($/yr)', 'number'],
     ['listingUrl', 'Listing URL', 'url'],
   ]
 
@@ -1427,7 +1427,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty }) {
               {[
                 ['name', 'Property Name *', 'text'], ['address', 'Street Address', 'text'], ['city', 'City *', 'text'], ['zip', 'Zip Code', 'text'], ['purchasePrice', 'Listing Price ($) *', 'number'],
                 ['unitCount', 'Unit Count *', 'number'], ['totalSF', 'Total Sq Ft', 'number'], ['occupancyRate', 'Occupancy (%)', 'number'], ['avgRentPerUnit', 'Avg Rent/Unit ($/mo)', 'number'],
-                ['operatingExpenses', 'Operating Expenses ($/yr)', 'number'], ['propertyTax', 'Property Tax ($/yr)', 'number'], ['insurance', 'Insurance ($/yr)', 'number'],
+                ['propertyTax', 'Property Tax ($/yr)', 'number'], ['insurance', 'Insurance ($/yr)', 'number'], ['operatingExpenses', 'Other OpEx ($/yr)', 'number'],
               ].map(([key, label, type]) => {
                 const isRequired = ['name', 'city', 'purchasePrice', 'unitCount'].includes(key)
                 const hasError = addFormError && isRequired && (!newProp[key] || (type === 'number' && +newProp[key] <= 0))
@@ -2407,15 +2407,21 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
             </div>
             <p className="text-xs text-navy-400 mt-0.5">{getAreaRate(prop.city, prop.state).source} (2025)</p>
           </div>
+          <div>
+            <label className="block text-xs font-medium text-navy-500 mb-1">Occupancy Rate</label>
+            <input type="number" step="0.01" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={prop.occupancyRate} onChange={e => handlePropEdit('occupancyRate', +e.target.value)} />
+          </div>
+          {/* Operating Expenses section */}
+          <div className="col-span-2 mt-2 mb-1">
+            <h4 className="text-xs font-semibold text-navy-600 uppercase tracking-wide border-b border-navy-200 pb-1">Operating Expenses</h4>
+          </div>
           {[
-            ['occupancyRate', 'Occupancy Rate', 'number'],
-            ['operatingExpenses', 'Operating Expenses ($/yr)', 'number'],
-            ['propertyTax', 'Property Tax ($/yr)', 'number'],
-            ['insurance', 'Insurance ($/yr)', 'number'],
+            ['propertyTax', 'Property Tax ($/yr)'],
+            ['insurance', 'Insurance ($/yr)'],
           ].map(([key, label]) => (
             <div key={key}>
               <label className="block text-xs font-medium text-navy-500 mb-1">{label}</label>
-              <input type="number" step={key === 'occupancyRate' ? '0.01' : '1'} className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={prop[key]} onChange={e => handlePropEdit(key, +e.target.value)} />
+              <input type="number" step="1" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={prop[key]} onChange={e => handlePropEdit(key, +e.target.value)} />
             </div>
           ))}
           <div>
@@ -2425,6 +2431,11 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
           <div>
             <label className="block text-xs font-medium text-navy-500 mb-1">CapEx Reserve (%)</label>
             <input type="number" step="0.5" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={capExPct} onChange={e => setCapExPct(+e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-navy-500 mb-1">Other OpEx ($/yr)</label>
+            <input type="number" step="1" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={prop.operatingExpenses} onChange={e => handlePropEdit('operatingExpenses', +e.target.value)} />
+            <p className="text-xs text-navy-400 mt-0.5">Utilities, repairs, admin, etc.</p>
           </div>
           <div className="col-span-2">
             <label className="block text-xs font-medium text-navy-500 mb-1">Listing URL</label>
@@ -2455,7 +2466,7 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
         <MetricCard label="Price / Unit" value={fmt(uw.pricePerUnit)} />
         <MetricCard label="Price / SF" value={fmtFull(uw.pricePerSF)} />
         <MetricCard label="Revenue / SF" value={`$${uw.revenuePerSF.toFixed(2)}`} sub="Annualized EGI per SF" />
-        <MetricCard label="Total Expenses" value={fmt(uw.totalOpEx)} sub={`Mgmt: ${fmt(uw.mgmtFee)} | CapEx: ${fmt(uw.capEx)}`} />
+        <MetricCard label="Total OpEx" value={fmt(uw.totalOpEx)} sub={`Tax + Ins + Mgmt + CapEx + Other`} />
         <MetricCard label="CapEx / SF" value={`$${(prop.totalSF > 0 ? uw.capEx / prop.totalSF : 0).toFixed(2)}`} sub="Annual reserve per SF" />
       </div>
 
