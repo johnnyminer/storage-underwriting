@@ -1209,9 +1209,6 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
             <button onClick={() => setShowScrapeModal(true)} className="bg-orange-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-orange-700 transition flex items-center gap-1"><span>🌐</span> Scrape URL</button>
             <button onClick={() => setShowImportModal(true)} className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-emerald-700 transition">Import CSV</button>
             <button onClick={() => setShowAddForm(true)} className="bg-navy-800 text-white text-sm px-4 py-2 rounded-lg hover:bg-navy-900 transition">+ Add Property</button>
-            {importedCount > 0 && (
-              <button onClick={onClearImported} className="text-red-500 text-sm px-3 py-2 rounded-lg hover:bg-red-50 transition">Clear Imported</button>
-            )}
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -2125,11 +2122,12 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
   )
 }
 
-function UnderwritingTab({ property, properties, onSelectProperty, onUpdateProperty }) {
+function UnderwritingTab({ property, properties, onSelectProperty, onUpdateProperty, onDeleteProperty }) {
   const [mgmtFeePct, setMgmtFeePct] = useState(6)
   const [capExPct, setCapExPct] = useState(5)
   const [editingUrl, setEditingUrl] = useState(false)
   const [areaPopulation, setAreaPopulation] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const prop = property
   const uw = prop ? runUnderwriting(prop, mgmtFeePct / 100, capExPct / 100) : null
@@ -2204,9 +2202,20 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
               )}
             </div>
           </div>
-          <select className="border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={prop.id} onChange={e => { setEditingUrl(false); onSelectProperty(properties.find(p => p.id === +e.target.value)) }}>
-            {properties.map(p => <option key={p.id} value={p.id}>{p.name} — {fmt(p.purchasePrice)}</option>)}
-          </select>
+          <div className="flex flex-col items-end gap-2">
+            <select className="border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={prop.id} onChange={e => { setEditingUrl(false); onSelectProperty(properties.find(p => p.id === +e.target.value)) }}>
+              {properties.map(p => <option key={p.id} value={p.id}>{p.name} — {fmt(p.purchasePrice)}</option>)}
+            </select>
+            {!showDeleteConfirm ? (
+              <button onClick={() => setShowDeleteConfirm(true)} className="text-xs text-red-400 hover:text-red-600 transition">Delete Property</button>
+            ) : (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <span className="text-xs text-red-700">Delete "{prop.name}"?</span>
+                <button onClick={() => { onDeleteProperty(prop.id); setShowDeleteConfirm(false) }} className="text-xs bg-red-600 text-white px-2 py-1 rounded font-medium hover:bg-red-700 transition">Yes, Delete</button>
+                <button onClick={() => setShowDeleteConfirm(false)} className="text-xs text-navy-500 hover:text-navy-700 px-2 py-1">Cancel</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2664,6 +2673,18 @@ export default function App() {
     if (isSample) setSampleEdits(prev => ({ ...prev, [updated.id]: updated }))
   }, [])
 
+  const handleDeleteProperty = useCallback((id) => {
+    // Delete from Supabase if it has a DB record
+    const dbId = dbIdMap.current[id]
+    if (dbId) deletePropertyFromDb(dbId)
+    // Remove from imported properties
+    setImportedProperties(prev => prev.filter(p => p.id !== id))
+    // Remove sample edits if it was a sample
+    setSampleEdits(prev => { const next = { ...prev }; delete next[id]; return next })
+    // Clear selection if this was the selected property
+    setSelectedProperty(prev => prev && prev.id === id ? null : prev)
+  }, [])
+
   const tabs = [
     { label: 'Buy Box & Deals', icon: '🎯' },
     { label: 'Underwriting', icon: '📊' },
@@ -2721,7 +2742,7 @@ export default function App() {
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         {tab === 0 && <BuyBoxTab properties={allProperties} setProperties={handleSetProperties} onSelectProperty={handleSelectProperty} importedCount={importedProperties.length} onClearImported={handleClearImported} />}
-        {tab === 1 && <UnderwritingTab property={selectedProperty} properties={allProperties} onSelectProperty={setSelectedProperty} onUpdateProperty={handleUpdateProperty} />}
+        {tab === 1 && <UnderwritingTab property={selectedProperty} properties={allProperties} onSelectProperty={setSelectedProperty} onUpdateProperty={handleUpdateProperty} onDeleteProperty={handleDeleteProperty} />}
         {tab === 2 && <OfferLettersTab property={selectedProperty} properties={allProperties} onSelectProperty={(p) => { setSelectedProperty(p); setTab(2) }} />}
       </main>
 
