@@ -1071,6 +1071,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
   const [showImportModal, setShowImportModal] = useState(false)
   const [showScrapeModal, setShowScrapeModal] = useState(false)
   const [newProp, setNewProp] = useState({ name: '', address: '', city: '', state: 'OH', zip: '', purchasePrice: '', unitCount: '', totalSF: '', occupancyRate: '', avgRentPerUnit: '', operatingExpenses: '', propertyTax: '', insurance: '', notes: '' })
+  const [addFormError, setAddFormError] = useState(null)
   const [sortKey, setSortKey] = useState('purchasePrice')
   const [sortDir, setSortDir] = useState('asc')
   const [geocodingStatus, setGeocodingStatus] = useState(null)
@@ -1101,14 +1102,24 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
   }
 
   const handleAddProperty = () => {
+    // Validate required fields
+    const missing = []
+    if (!newProp.name.trim()) missing.push('Property Name')
+    if (!newProp.city.trim()) missing.push('City')
+    if (!newProp.purchasePrice || +newProp.purchasePrice <= 0) missing.push('Purchase Price')
+    if (!newProp.unitCount || +newProp.unitCount <= 0) missing.push('Unit Count')
+    if (missing.length > 0) {
+      setAddFormError(`Please fill in: ${missing.join(', ')}`)
+      return
+    }
     const p = {
-      id: Date.now(), name: newProp.name, address: newProp.address || newProp.city, city: newProp.city, state: newProp.state, zip: newProp.zip,
-      purchasePrice: +newProp.purchasePrice, unitCount: +newProp.unitCount, totalSF: +newProp.totalSF,
-      occupancyRate: +newProp.occupancyRate / 100, avgRentPerUnit: +newProp.avgRentPerUnit,
-      operatingExpenses: +newProp.operatingExpenses, propertyTax: +newProp.propertyTax, insurance: +newProp.insurance,
+      id: Date.now(), name: newProp.name.trim(), address: newProp.address.trim() || newProp.city.trim(), city: newProp.city.trim(), state: newProp.state || 'OH', zip: newProp.zip,
+      purchasePrice: +newProp.purchasePrice, unitCount: +newProp.unitCount, totalSF: +newProp.totalSF || 0,
+      occupancyRate: newProp.occupancyRate ? +newProp.occupancyRate / 100 : 0.85, avgRentPerUnit: +newProp.avgRentPerUnit || 0,
+      operatingExpenses: +newProp.operatingExpenses || 0, propertyTax: +newProp.propertyTax || 0, insurance: +newProp.insurance || 0,
       yearBuilt: 2000, notes: newProp.notes, imported: true
     }
-    if (!p.name || !p.purchasePrice) return
+    setAddFormError(null)
     setProperties(prev => [...prev, p])
     setShowAddForm(false)
     setNewProp({ name: '', address: '', city: '', state: 'OH', zip: '', purchasePrice: '', unitCount: '', totalSF: '', occupancyRate: '', avgRentPerUnit: '', operatingExpenses: '', propertyTax: '', insurance: '', notes: '' })
@@ -1243,17 +1254,24 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-navy-900 mb-4">Add New Property</h3>
+            {addFormError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">{addFormError}</div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               {[
-                ['name', 'Property Name', 'text'], ['address', 'Street Address', 'text'], ['city', 'City', 'text'], ['zip', 'Zip Code', 'text'], ['purchasePrice', 'Purchase Price ($)', 'number'],
-                ['unitCount', 'Unit Count', 'number'], ['totalSF', 'Total Sq Ft', 'number'], ['occupancyRate', 'Occupancy (%)', 'number'], ['avgRentPerUnit', 'Avg Rent/Unit ($/mo)', 'number'],
+                ['name', 'Property Name *', 'text'], ['address', 'Street Address', 'text'], ['city', 'City *', 'text'], ['zip', 'Zip Code', 'text'], ['purchasePrice', 'Purchase Price ($) *', 'number'],
+                ['unitCount', 'Unit Count *', 'number'], ['totalSF', 'Total Sq Ft', 'number'], ['occupancyRate', 'Occupancy (%)', 'number'], ['avgRentPerUnit', 'Avg Rent/Unit ($/mo)', 'number'],
                 ['operatingExpenses', 'Operating Expenses ($/yr)', 'number'], ['propertyTax', 'Property Tax ($/yr)', 'number'], ['insurance', 'Insurance ($/yr)', 'number'],
-              ].map(([key, label, type]) => (
-                <div key={key}>
-                  <label className="block text-xs font-medium text-navy-600 mb-1">{label}</label>
-                  <input type={type} className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={newProp[key]} onChange={e => setNewProp(p => ({ ...p, [key]: e.target.value }))} />
-                </div>
-              ))}
+              ].map(([key, label, type]) => {
+                const isRequired = ['name', 'city', 'purchasePrice', 'unitCount'].includes(key)
+                const hasError = addFormError && isRequired && (!newProp[key] || (type === 'number' && +newProp[key] <= 0))
+                return (
+                  <div key={key}>
+                    <label className="block text-xs font-medium text-navy-600 mb-1">{label}</label>
+                    <input type={type} className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none ${hasError ? 'border-red-400 bg-red-50' : 'border-navy-200'}`} value={newProp[key]} onChange={e => { setNewProp(p => ({ ...p, [key]: e.target.value })); if (addFormError) setAddFormError(null) }} placeholder={type === 'number' && isRequired ? 'Required' : ''} />
+                  </div>
+                )
+              })}
             </div>
             <div className="mt-3">
               <label className="block text-xs font-medium text-navy-600 mb-1">Notes</label>
@@ -1261,7 +1279,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
             </div>
             <div className="flex gap-3 mt-4">
               <button onClick={handleAddProperty} className="flex-1 bg-navy-800 text-white py-2 rounded-lg font-medium hover:bg-navy-900 transition">Add Property</button>
-              <button onClick={() => setShowAddForm(false)} className="flex-1 border border-navy-200 text-navy-700 py-2 rounded-lg font-medium hover:bg-navy-50 transition">Cancel</button>
+              <button onClick={() => { setShowAddForm(false); setAddFormError(null) }} className="flex-1 border border-navy-200 text-navy-700 py-2 rounded-lg font-medium hover:bg-navy-50 transition">Cancel</button>
             </div>
           </div>
         </div>
