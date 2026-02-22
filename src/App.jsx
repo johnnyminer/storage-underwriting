@@ -1601,7 +1601,10 @@ function polygonAreaSqM(coords) {
 
 async function fetchCompetitors(lat, lng) {
   const r = MILES_10_IN_METERS
-  const query = `[out:json][timeout:30];
+
+  // Split into two lighter queries to avoid Overpass rate limits / timeouts
+  // Query 1: OSM-tagged storage facilities (fast — uses indexed tags)
+  const tagQuery = `[out:json][timeout:25];
 (
   nwr["self_storage"](around:${r},${lat},${lng});
   nwr["amenity"="self_storage"](around:${r},${lat},${lng});
@@ -1611,24 +1614,57 @@ async function fetchCompetitors(lat, lng) {
   nwr["building"="self_storage"](around:${r},${lat},${lng});
   nwr["self_storage"="yes"](around:${r},${lat},${lng});
   nwr["storage_type"~"self_storage|self-storage"](around:${r},${lat},${lng});
-  nwr["name"~"[Ss]elf.?[Ss]torage|[Ss]torage [Uu]nit|[Ss]torage [Ff]acilit|Mini.?[Ss]torage|STORAGE|Public Storage|Extra Space|CubeSmart|Life Storage|Uncle Bob|U-Haul.*Storage|StorQuest|SecurCare|SmartStop|Stor-?All|National Storage|Prime Storage|Simply Self Storage|Budget Self Storage|Store ?Here|EZ Storage|A-1 Storage|All American Storage|Stor-?It|Storage Sense|iStorage|Devon Self Storage|Compass Self Storage|Great Value Storage|Midgard Self Storage|StorPlace|Space Shop|Affordable Storage",i](around:${r},${lat},${lng});
 );
 out geom 300;`
 
-  // Try primary server, fallback to alternative if it fails
-  let data
-  for (const server of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
-    try {
-      const res = await fetch(server, {
-        method: 'POST',
-        body: 'data=' + encodeURIComponent(query)
-      })
-      if (!res.ok) continue
-      data = await res.json()
-      if (data.elements) break
-    } catch { continue }
+  // Query 2: Name-based search (lighter regex — just core patterns, no huge brand list)
+  const nameQuery = `[out:json][timeout:25];
+(
+  nwr["name"~"self.?storage|mini.?storage|storage unit|storage facilit",i](around:${r},${lat},${lng});
+  nwr["name"~"Public Storage|Extra Space|CubeSmart|Life Storage|U-Haul|Uncle Bob",i](around:${r},${lat},${lng});
+);
+out geom 200;`
+
+  const servers = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+  ]
+
+  async function runQuery(query) {
+    for (const server of servers) {
+      try {
+        const res = await fetch(server, {
+          method: 'POST',
+          body: 'data=' + encodeURIComponent(query)
+        })
+        if (!res.ok) continue
+        const d = await res.json()
+        if (d.elements) return d.elements
+      } catch { continue }
+    }
+    return []
   }
-  if (!data?.elements) return []
+
+  // Run both queries in parallel for speed
+  const [tagResults, nameResults] = await Promise.all([
+    runQuery(tagQuery),
+    runQuery(nameQuery)
+  ])
+
+  // Merge and deduplicate by OSM id
+  const seen = new Set()
+  const allElements = []
+  for (const el of [...tagResults, ...nameResults]) {
+    const key = `${el.type}-${el.id}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      allElements.push(el)
+    }
+  }
+
+  if (allElements.length === 0) return []
+  const data = { elements: allElements }
 
   const SQM_TO_SQFT = 10.7639
 
