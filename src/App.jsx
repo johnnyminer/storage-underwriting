@@ -121,7 +121,9 @@ function generateCSVTemplate() {
 }
 
 // ─── HAVERSINE DISTANCE ────────────────────────────────────────────────────
-// ─── SETTINGS (persisted in localStorage) ───────────────────────────────────
+// ─── SETTINGS (persisted to Supabase + localStorage cache) ──────────────────
+const SETTINGS_ROW_NAME = '__storagevault_settings__'
+
 const DEFAULT_SETTINGS = {
   homeCity: 'Columbus',
   homeState: 'OH',
@@ -147,6 +149,7 @@ const DEFAULT_SETTINGS = {
   cashEarnest: 5,
 }
 
+// Load from localStorage cache (synchronous, used during render)
 function loadSettings() {
   try {
     const saved = localStorage.getItem('storagevault_settings')
@@ -155,8 +158,36 @@ function loadSettings() {
   return { ...DEFAULT_SETTINGS }
 }
 
-function saveSettings(settings) {
+// Save to both localStorage and Supabase
+async function saveSettingsToDb(settings) {
   try { localStorage.setItem('storagevault_settings', JSON.stringify(settings)) } catch {}
+  try {
+    const json = JSON.stringify(settings)
+    // Check if settings row exists
+    const { data } = await supabase.from('properties').select('id').eq('name', SETTINGS_ROW_NAME).limit(1)
+    if (data && data.length > 0) {
+      await supabase.from('properties').update({ notes: json, updated_at: new Date().toISOString() }).eq('id', data[0].id)
+    } else {
+      await supabase.from('properties').insert({ name: SETTINGS_ROW_NAME, notes: json, address: '', city: '', state: '', zip: '' })
+    }
+  } catch (e) {
+    console.error('Failed to save settings to Supabase:', e)
+  }
+}
+
+// Load settings from Supabase (async, called on mount)
+async function loadSettingsFromDb() {
+  try {
+    const { data } = await supabase.from('properties').select('notes').eq('name', SETTINGS_ROW_NAME).limit(1)
+    if (data && data.length > 0 && data[0].notes) {
+      const settings = { ...DEFAULT_SETTINGS, ...JSON.parse(data[0].notes) }
+      try { localStorage.setItem('storagevault_settings', JSON.stringify(settings)) } catch {}
+      return settings
+    }
+  } catch (e) {
+    console.error('Failed to load settings from Supabase:', e)
+  }
+  return null
 }
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -2460,6 +2491,7 @@ async function loadPropertiesFromDb() {
     const { data, error } = await supabase
       .from('properties')
       .select('*')
+      .neq('name', SETTINGS_ROW_NAME)
       .order('created_at', { ascending: true })
     if (error) throw error
     return (data || []).map(fromDbRow)
@@ -2672,7 +2704,7 @@ export default function App() {
   // Map local property IDs → Supabase row IDs
   const dbIdMap = useRef({})
 
-  // Load all properties from Supabase on mount
+  // Load all properties and settings from Supabase on mount
   useEffect(() => {
     loadPropertiesFromDb().then(rows => {
       const loaded = rows.map(row => {
@@ -2682,6 +2714,10 @@ export default function App() {
       })
       setProperties(loaded)
       setDbLoaded(true)
+    })
+    // Load settings from Supabase and merge with localStorage cache
+    loadSettingsFromDb().then(dbSettings => {
+      if (dbSettings) setSettings(dbSettings)
     })
   }, [])
 
@@ -2742,7 +2778,7 @@ export default function App() {
 
   const handleSaveSettings = (newSettings) => {
     setSettings(newSettings)
-    saveSettings(newSettings)
+    saveSettingsToDb(newSettings)
   }
 
   const tabs = [
