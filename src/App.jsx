@@ -259,9 +259,20 @@ function runUnderwriting(prop, mgmtFeePct = 0.06, capExPct = 0.05) {
   const pricePerUnit = prop.purchasePrice / prop.unitCount
   const pricePerSF = prop.purchasePrice / (prop.totalSF || 1)
 
+  // Break-even occupancy: at what occupancy does NOI = 0?
+  // NOI = 0 when EGI = totalOpEx → GPI * occ = fixedOpEx + (GPI * occ * variablePcts)
+  // Fixed expenses = opex + tax + insurance; variable = mgmt + capex (as % of EGI)
+  const fixedOpEx = prop.operatingExpenses + prop.propertyTax + prop.insurance
+  const variablePct = mgmtFeePct + capExPct
+  const breakEvenOcc = gpi > 0 ? fixedOpEx / (gpi * (1 - variablePct)) : 0
+
+  // Revenue per SF (annualized)
+  const revenuePerSF = prop.totalSF > 0 ? egi / prop.totalSF : 0
+
   const scenarios = [
     { name: "Seller Financed", downPct: 0.10, rate: 0.06, years: 15, earnestPct: 0.01 },
-    { name: "Conventional Loan", downPct: 0.22, rate: 0.07, years: 25, earnestPct: 0.02 },
+    { name: "SBA 7(a)", downPct: 0.15, rate: 0.0675, years: 25, earnestPct: 0.01 },
+    { name: "Conventional", downPct: 0.25, rate: 0.063, years: 25, earnestPct: 0.02 },
     { name: "Cash Offer", downPct: 1.0, rate: 0, years: 0, earnestPct: 0.05 },
   ].map(s => {
     const downPayment = prop.purchasePrice * s.downPct
@@ -278,15 +289,15 @@ function runUnderwriting(prop, mgmtFeePct = 0.06, capExPct = 0.05) {
   })
 
   const reasons = []
-  if (capRate < 0.06) reasons.push("Cap rate below 6%")
-  if (expenseRatio > 0.45) reasons.push("Expense ratio above 45%")
-  if (scenarios[0].dscr < 1.2 && scenarios[0].dscr !== Infinity) reasons.push("DSCR below 1.2 (seller financed)")
-  if (scenarios[1].dscr < 1.2 && scenarios[1].dscr !== Infinity) reasons.push("DSCR below 1.2 (conventional)")
+  if (capRate < 0.07) reasons.push("Cap rate below 7%")
+  if (expenseRatio > 0.40) reasons.push("Expense ratio above 40%")
+  if (scenarios[0].dscr < 1.25 && scenarios[0].dscr !== Infinity) reasons.push("DSCR below 1.25 (seller financed)")
+  if (scenarios[2].dscr < 1.25 && scenarios[2].dscr !== Infinity) reasons.push("DSCR below 1.25 (conventional)")
   if (prop.occupancyRate < 0.70) reasons.push("Occupancy below 70%")
   const autoVerdict = reasons.length === 0 ? 'PASS' : 'FAIL'
   const verdict = prop.verdictOverride || 'PENDING'
 
-  return { gpi, egi, mgmtFee, capEx, totalOpEx, noi, capRate, expenseRatio, pricePerUnit, pricePerSF, scenarios, verdict, autoVerdict, reasons }
+  return { gpi, egi, mgmtFee, capEx, totalOpEx, noi, capRate, expenseRatio, pricePerUnit, pricePerSF, breakEvenOcc, revenuePerSF, scenarios, verdict, autoVerdict, reasons }
 }
 
 // ─── OFFER LETTER GENERATOR ─────────────────────────────────────────────────
@@ -303,7 +314,15 @@ function generateOfferLetter(prop, scenario, buyerName, buyerAddress, sellerName
   - Amortization: ${scenario.years} years, fully amortizing
   - Monthly Payment: ${fmtFull(scenario.monthlyPayment)}
   - No prepayment penalty after Year 3`
-  } else if (scenario.name === "Conventional Loan") {
+  } else if (scenario.name === "SBA 7(a)") {
+    financingTerms = `This offer is contingent upon Buyer obtaining SBA 7(a) financing under the following terms:
+  - Down Payment: ${fmt(scenario.downPayment)} (${pct(scenario.downPct)} of purchase price)
+  - Loan Amount: ${fmt(scenario.loanAmount)}
+  - Estimated Interest Rate: ${pct(scenario.rate)} per annum (variable, tied to Prime)
+  - Loan Term: ${scenario.years} years
+  - Financing Contingency Period: 60 days from mutual acceptance
+  - Subject to SBA approval and standard SBA eligibility requirements`
+  } else if (scenario.name === "Conventional") {
     financingTerms = `This offer is contingent upon Buyer obtaining conventional financing under the following terms:
   - Down Payment: ${fmt(scenario.downPayment)} (${pct(scenario.downPct)} of purchase price)
   - Loan Amount: ${fmt(scenario.loanAmount)}
@@ -1776,7 +1795,7 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
             {(() => {
               const totalSqftAll = totalSqft5 + totalSqft10
               const sqftPerCapita = areaPopulation && totalSqftAll > 0 ? (totalSqftAll / areaPopulation).toFixed(2) : null
-              const benchmark = sqftPerCapita ? (sqftPerCapita >= 8 ? { label: 'Oversupplied', color: 'text-red-600' } : sqftPerCapita >= 5 ? { label: 'Balanced', color: 'text-amber-600' } : { label: 'Undersupplied', color: 'text-emerald-600' }) : null
+              const benchmark = sqftPerCapita ? (sqftPerCapita >= 8 ? { label: 'Oversupplied', color: 'text-red-600' } : sqftPerCapita >= 6 ? { label: 'Balanced', color: 'text-amber-600' } : { label: 'Undersupplied', color: 'text-emerald-600' }) : null
               return (
                 <div className="bg-navy-50 rounded-lg p-3">
                   <div className="text-xs text-navy-500 mb-1">SF per Capita</div>
@@ -1955,11 +1974,15 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
         <MetricCard label="Gross Potential Income" value={fmt(uw.gpi)} sub="Annual (100% occupied)" />
         <MetricCard label="Effective Gross Income" value={fmt(uw.egi)} sub={`At ${pct(prop.occupancyRate)} occupancy`} />
         <MetricCard label="Net Operating Income" value={fmt(uw.noi)} color={uw.noi > 0 ? "text-emerald-600" : "text-red-600"} sub="After all expenses" />
-        <MetricCard label="Cap Rate" value={pct(uw.capRate)} color={uw.capRate >= 0.06 ? "text-emerald-600" : "text-amber-600"} sub="NOI / Purchase Price" />
-        <MetricCard label="Expense Ratio" value={pct(uw.expenseRatio)} color={uw.expenseRatio <= 0.45 ? "text-emerald-600" : "text-red-600"} sub="Expenses / EGI" />
+        <MetricCard label="Cap Rate" value={pct(uw.capRate)} color={uw.capRate >= 0.07 ? "text-emerald-600" : uw.capRate >= 0.06 ? "text-amber-600" : "text-red-600"} sub="NOI / Purchase Price" />
+        <MetricCard label="Expense Ratio" value={pct(uw.expenseRatio)} color={uw.expenseRatio <= 0.35 ? "text-emerald-600" : uw.expenseRatio <= 0.40 ? "text-amber-600" : "text-red-600"} sub="Expenses / EGI" />
+        <MetricCard label="Cash-on-Cash" value={pct(uw.scenarios[2].cashOnCash)} color={uw.scenarios[2].cashOnCash >= 0.08 ? "text-emerald-600" : uw.scenarios[2].cashOnCash >= 0 ? "text-amber-600" : "text-red-600"} sub="Conventional scenario" />
+        <MetricCard label="Break-even Occ." value={pct(uw.breakEvenOcc)} color={uw.breakEvenOcc <= 0.60 ? "text-emerald-600" : uw.breakEvenOcc <= 0.75 ? "text-amber-600" : "text-red-600"} sub="Min occupancy for NOI > 0" />
         <MetricCard label="Price / Unit" value={fmt(uw.pricePerUnit)} />
         <MetricCard label="Price / SF" value={fmtFull(uw.pricePerSF)} />
+        <MetricCard label="Revenue / SF" value={`$${uw.revenuePerSF.toFixed(2)}`} sub="Annualized EGI per SF" />
         <MetricCard label="Total Expenses" value={fmt(uw.totalOpEx)} sub={`Mgmt: ${fmt(uw.mgmtFee)} | CapEx: ${fmt(uw.capEx)}`} />
+        <MetricCard label="CapEx / SF" value={`$${(prop.totalSF > 0 ? uw.capEx / prop.totalSF : 0).toFixed(2)}`} sub="Annual reserve per SF" />
       </div>
 
       {/* Market Demand */}
@@ -1975,7 +1998,7 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
           <table className="w-full text-sm">
             <thead className="bg-navy-50">
               <tr>
-                {['Metric', 'Seller Financed', 'Conventional Loan', 'Cash Offer'].map(h => (
+                {['Metric', 'Seller Financed', 'SBA 7(a)', 'Conventional', 'Cash Offer'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-navy-600 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -1989,7 +2012,7 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
                 ['Monthly Payment', s => s.monthlyPayment > 0 ? fmtFull(s.monthlyPayment) : '—'],
                 ['Annual Debt Service', s => s.annualDebt > 0 ? fmt(s.annualDebt) : '—'],
                 ['Annual Cash Flow', s => <span className={s.cashFlow >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>{fmt(s.cashFlow)}</span>],
-                ['DSCR', s => s.dscr === Infinity ? '—' : <span className={s.dscr >= 1.2 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>{s.dscr.toFixed(2)}x</span>],
+                ['DSCR', s => s.dscr === Infinity ? '—' : <span className={s.dscr >= 1.25 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>{s.dscr.toFixed(2)}x</span>],
                 ['Cash-on-Cash Return', s => <span className={s.cashOnCash >= 0.08 ? 'text-emerald-600 font-semibold' : 'text-navy-700 font-semibold'}>{pct(s.cashOnCash)}</span>],
                 ['Total Cash Needed', s => fmt(s.totalCashNeeded)],
                 ['Earnest Money', s => fmt(s.earnestMoney)],
@@ -2060,8 +2083,9 @@ function OfferLettersTab({ property, properties, onSelectProperty }) {
             <label className="block text-xs font-medium text-navy-600 mb-1">Offer Type</label>
             <select className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={selectedScenario} onChange={e => setSelectedScenario(+e.target.value)}>
               <option value={0}>Seller Financed</option>
-              <option value={1}>Conventional Loan</option>
-              <option value={2}>Cash Offer</option>
+              <option value={1}>SBA 7(a)</option>
+              <option value={2}>Conventional</option>
+              <option value={3}>Cash Offer</option>
             </select>
           </div>
           <div>
