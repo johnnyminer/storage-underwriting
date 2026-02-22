@@ -2572,6 +2572,7 @@ export default function App() {
   const [importedProperties, setImportedProperties] = useState([])
   const [selectedProperty, setSelectedProperty] = useState(null)
   const [sampleEdits, setSampleEdits] = useState({})
+  const [deletedIds, setDeletedIds] = useState(new Set())
   const [dbLoaded, setDbLoaded] = useState(false)
   // Map local property IDs → Supabase row IDs
   const dbIdMap = useRef({})
@@ -2603,9 +2604,9 @@ export default function App() {
   }, [])
 
   const allProperties = useMemo(() => [
-    ...SAMPLE_PROPERTIES.map(p => sampleEdits[p.id] || p),
-    ...importedProperties
-  ], [importedProperties, sampleEdits])
+    ...SAMPLE_PROPERTIES.filter(p => !deletedIds.has(p.id)).map(p => sampleEdits[p.id] || p),
+    ...importedProperties.filter(p => !deletedIds.has(p.id))
+  ], [importedProperties, sampleEdits, deletedIds])
 
   const handleSetProperties = useCallback((updater) => {
     if (typeof updater === 'function') {
@@ -2677,11 +2678,12 @@ export default function App() {
     // Delete from Supabase if it has a DB record
     const dbId = dbIdMap.current[id]
     if (dbId) deletePropertyFromDb(dbId)
-    // Remove from imported properties
+    // Track as deleted so it's excluded from allProperties (works for both sample + imported)
+    setDeletedIds(prev => new Set([...prev, id]))
+    // Also clean up imported and sample edits state
     setImportedProperties(prev => prev.filter(p => p.id !== id))
-    // Remove sample edits if it was a sample
     setSampleEdits(prev => { const next = { ...prev }; delete next[id]; return next })
-    // Clear selection if this was the selected property
+    // Clear selection
     setSelectedProperty(prev => prev && prev.id === id ? null : prev)
   }, [])
 
