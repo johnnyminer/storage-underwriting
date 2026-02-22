@@ -148,88 +148,6 @@ async function geocodeAndDistance(address, city, state, zip) {
   return null
 }
 
-// ─── SAMPLE DATA ────────────────────────────────────────────────────────────
-const SAMPLE_PROPERTIES = [
-  {
-    id: 1, name: "A&B Storage", address: "2935 Crawford Wyandot County Line Rd", city: "Nevada", state: "OH", zip: "44849",
-    purchasePrice: 925000, unitCount: 280, totalSF: 42000, occupancyRate: 0.82, avgRentPerUnit: 72,
-    operatingExpenses: 48000, propertyTax: 18000, insurance: 9500, yearBuilt: 1995,
-    notes: "Seller financing available at 5% interest. Price reduction."
-  },
-  {
-    id: 2, name: "Profitable Self Storage", address: "1450 N Salem Warren Rd", city: "North Jackson", state: "OH", zip: "44451",
-    purchasePrice: 790000, unitCount: 220, totalSF: 35000, occupancyRate: 0.78, avgRentPerUnit: 68,
-    operatingExpenses: 42000, propertyTax: 15000, insurance: 8500, yearBuilt: 2008,
-    notes: "Well-maintained, profitable operation."
-  },
-  {
-    id: 3, name: "Mt Vernon Storage", address: "Mt Vernon", city: "Mt Vernon", state: "OH", zip: "43050",
-    purchasePrice: 849000, unitCount: 200, totalSF: 30000, occupancyRate: 0.85, avgRentPerUnit: 75,
-    operatingExpenses: 45000, propertyTax: 16000, insurance: 9000, yearBuilt: 2002,
-    notes: ""
-  },
-  {
-    id: 4, name: "A Plus Storage Pros", address: "Monclova", city: "Monclova", state: "OH", zip: "43542",
-    purchasePrice: 849000, unitCount: 190, totalSF: 28000, occupancyRate: 0.88, avgRentPerUnit: 80,
-    operatingExpenses: 40000, propertyTax: 14000, insurance: 8000, yearBuilt: 2010,
-    notes: ""
-  },
-  {
-    id: 5, name: "Bellevue Storage", address: "Bellevue", city: "Bellevue", state: "OH", zip: "44811",
-    purchasePrice: 618000, unitCount: 150, totalSF: 22000, occupancyRate: 0.80, avgRentPerUnit: 65,
-    operatingExpenses: 32000, propertyTax: 12000, insurance: 7000, yearBuilt: 1998,
-    notes: ""
-  },
-  {
-    id: 6, name: "Dayton Self Storage", address: "Dayton", city: "Dayton", state: "OH", zip: "45420",
-    purchasePrice: 750000, unitCount: 180, totalSF: 27000, occupancyRate: 0.83, avgRentPerUnit: 70,
-    operatingExpenses: 38000, propertyTax: 14500, insurance: 8500, yearBuilt: 2000,
-    notes: ""
-  },
-  {
-    id: 7, name: "Warren Storage Facility", address: "Warren", city: "Warren", state: "OH", zip: "44483",
-    purchasePrice: 675000, unitCount: 160, totalSF: 24000, occupancyRate: 0.79, avgRentPerUnit: 66,
-    operatingExpenses: 35000, propertyTax: 13000, insurance: 7500, yearBuilt: 1997,
-    notes: ""
-  },
-  {
-    id: 8, name: "Berea Storage", address: "Berea", city: "Berea", state: "OH", zip: "44017",
-    purchasePrice: 350000, unitCount: 80, totalSF: 12000, occupancyRate: 0.75, avgRentPerUnit: 60,
-    operatingExpenses: 18000, propertyTax: 8000, insurance: 5000, yearBuilt: 1990,
-    notes: "Smaller facility, good starter property."
-  },
-  {
-    id: 9, name: "Grafton Storage", address: "Grafton", city: "Grafton", state: "OH", zip: "44044",
-    purchasePrice: 900000, unitCount: 250, totalSF: 38000, occupancyRate: 0.86, avgRentPerUnit: 74,
-    operatingExpenses: 46000, propertyTax: 17000, insurance: 9000, yearBuilt: 2005,
-    notes: ""
-  },
-  {
-    id: 10, name: "Lorain Storage", address: "Lorain", city: "Lorain", state: "OH", zip: "44052",
-    purchasePrice: 960000, unitCount: 270, totalSF: 40000, occupancyRate: 0.81, avgRentPerUnit: 71,
-    operatingExpenses: 50000, propertyTax: 19000, insurance: 10000, yearBuilt: 1999,
-    notes: "Up to 8.36 acres available."
-  },
-  {
-    id: 11, name: "Mineral Ridge Storage", address: "Mineral Ridge", city: "Mineral Ridge", state: "OH", zip: "44440",
-    purchasePrice: 580000, unitCount: 130, totalSF: 19000, occupancyRate: 0.77, avgRentPerUnit: 62,
-    operatingExpenses: 28000, propertyTax: 11000, insurance: 6500, yearBuilt: 1994,
-    notes: ""
-  },
-  {
-    id: 12, name: "Lebanon Storage", address: "6387 Ohio 48", city: "Lebanon", state: "OH", zip: "45036",
-    purchasePrice: 599900, unitCount: 140, totalSF: 31842, occupancyRate: 0.84, avgRentPerUnit: 70,
-    operatingExpenses: 30000, propertyTax: 12000, insurance: 7000, yearBuilt: 2001,
-    notes: ""
-  },
-]
-
-// ─── DISTANCE LOOKUP (approx miles from Columbus OH 43215) ──────────────────
-const ZIP_DISTANCES = {
-  "44849": 85, "44451": 155, "43050": 50, "43542": 140, "44811": 95,
-  "45420": 72, "44483": 160, "44017": 135, "44044": 130, "44052": 120,
-  "44440": 170, "45036": 65
-}
 
 // ─── UTILITY FUNCTIONS ──────────────────────────────────────────────────────
 const fmt = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
@@ -244,7 +162,7 @@ function calcMonthlyPayment(principal, annualRate, years) {
 }
 
 function getDistance(p) {
-  return ZIP_DISTANCES[p.zip] ?? p.calculatedDistance ?? 999
+  return p.calculatedDistance ?? 999
 }
 
 function runUnderwriting(prop, mgmtFeePct = 0.06, capExPct = 0.05) {
@@ -1063,7 +981,7 @@ function ScrapeURLModal({ onImport, onClose }) {
 }
 
 // ─── BUY BOX TAB ────────────────────────────────────────────────────────────
-function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount, onClearImported }) {
+function BuyBoxTab({ properties, setProperties, onSelectProperty }) {
   const [criteria, setCriteria] = useState({
     maxPrice: '', maxDistance: '', minUnits: '', minCapRate: '', minOccupancy: ''
   })
@@ -1146,7 +1064,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
 
   const handleImport = async (imported) => {
     // Geocode distances for properties without known zips
-    const needsGeocode = imported.filter(p => !ZIP_DISTANCES[p.zip])
+    const needsGeocode = imported.filter(p => !p.calculatedDistance)
     if (needsGeocode.length > 0) {
       setGeocodingStatus(`Calculating distances for ${needsGeocode.length} properties...`)
       for (let i = 0; i < needsGeocode.length; i++) {
@@ -1201,9 +1119,6 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
         <div className="flex items-center justify-between px-6 py-4 border-b border-navy-100 flex-wrap gap-2">
           <div className="flex items-center gap-3">
             <h3 className="text-lg font-semibold text-navy-900">{hasActiveFilters ? `${matched.length} of ${properties.length} Match` : `${properties.length} Properties`}</h3>
-            {importedCount > 0 && (
-              <span className="text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">{importedCount} imported</span>
-            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => setShowScrapeModal(true)} className="bg-orange-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-orange-700 transition flex items-center gap-1"><span>🌐</span> Scrape URL</button>
@@ -1233,7 +1148,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
                     <td className="px-4 py-3 font-medium text-navy-900">
                       <div className="flex items-center gap-1.5">
                         {p.name}
-                        {p.imported && <span className="inline-block w-1.5 h-1.5 bg-purple-500 rounded-full" title="Imported"></span>}
+
                       </div>
                     </td>
                     <td className="px-4 py-3 text-navy-500 text-xs max-w-[200px] truncate" title={p.address}>{p.address}</td>
@@ -1266,7 +1181,7 @@ function BuyBoxTab({ properties, setProperties, onSelectProperty, importedCount,
                     <td className="px-4 py-3 font-medium text-navy-900">
                       <div className="flex items-center gap-1.5">
                         {p.name}
-                        {p.imported && <span className="inline-block w-1.5 h-1.5 bg-purple-500 rounded-full" title="Imported"></span>}
+
                       </div>
                     </td>
                     <td className="px-4 py-3 text-navy-500 text-xs max-w-[200px] truncate" title={p.address}>{p.address}</td>
@@ -2569,10 +2484,8 @@ async function syncAllToDb(properties) {
 // ─── MAIN APP ───────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState(0)
-  const [importedProperties, setImportedProperties] = useState([])
+  const [properties, setProperties] = useState([])
   const [selectedProperty, setSelectedProperty] = useState(null)
-  const [sampleEdits, setSampleEdits] = useState({})
-  const [deletedIds, setDeletedIds] = useState(new Set())
   const [dbLoaded, setDbLoaded] = useState(false)
   // Map local property IDs → Supabase row IDs
   const dbIdMap = useRef({})
@@ -2580,74 +2493,42 @@ export default function App() {
   // Load all properties from Supabase on mount
   useEffect(() => {
     loadPropertiesFromDb().then(rows => {
-      const imported = []
-      const edits = {}
-      rows.forEach(row => {
-        // Check if this matches a sample property by name
-        const matchingSample = SAMPLE_PROPERTIES.find(s =>
-          s.name === row.name && !row.imported
-        )
-        if (matchingSample) {
-          edits[matchingSample.id] = { ...row, id: matchingSample.id, _dbId: parseInt(row.id) }
-          dbIdMap.current[matchingSample.id] = parseInt(row.id)
-        } else {
-          const localId = 'db-' + row.id
-          const prop = { ...row, id: localId, _dbId: parseInt(row.id), imported: true }
-          imported.push(prop)
-          dbIdMap.current[localId] = parseInt(row.id)
-        }
+      const loaded = rows.map(row => {
+        const localId = 'db-' + row.id
+        dbIdMap.current[localId] = parseInt(row.id)
+        return { ...row, id: localId, _dbId: parseInt(row.id) }
       })
-      setImportedProperties(imported)
-      setSampleEdits(edits)
+      setProperties(loaded)
       setDbLoaded(true)
     })
   }, [])
 
-  const allProperties = useMemo(() => [
-    ...SAMPLE_PROPERTIES.filter(p => !deletedIds.has(p.id)).map(p => sampleEdits[p.id] || p),
-    ...importedProperties.filter(p => !deletedIds.has(p.id))
-  ], [importedProperties, sampleEdits, deletedIds])
+  const allProperties = properties
 
   const handleSetProperties = useCallback((updater) => {
     if (typeof updater === 'function') {
-      setImportedProperties(prev => {
-        const allOld = [...SAMPLE_PROPERTIES, ...prev]
-        const allNew = updater(allOld)
-        const oldIds = new Set(allOld.map(p => p.id))
+      setProperties(prev => {
+        const allNew = updater(prev)
+        const oldIds = new Set(prev.map(p => p.id))
         const newlyAdded = allNew.filter(p => !oldIds.has(p.id))
         // Save new properties to Supabase
         newlyAdded.forEach(prop => {
-          savePropertyToDb({ ...prop, imported: true }).then(dbId => {
+          savePropertyToDb(prop).then(dbId => {
             if (dbId) dbIdMap.current[prop.id] = dbId
           })
         })
-        return [...prev, ...newlyAdded]
+        return allNew
       })
     } else {
-      const sampleIds = new Set(SAMPLE_PROPERTIES.map(p => p.id))
-      const imported = updater.filter(p => !sampleIds.has(p.id))
-      imported.forEach(prop => {
-        savePropertyToDb({ ...prop, imported: true }).then(dbId => {
-          if (dbId) dbIdMap.current[prop.id] = dbId
-        })
+      updater.forEach(prop => {
+        if (!dbIdMap.current[prop.id]) {
+          savePropertyToDb(prop).then(dbId => {
+            if (dbId) dbIdMap.current[prop.id] = dbId
+          })
+        }
       })
-      setImportedProperties(imported)
+      setProperties(updater)
     }
-  }, [])
-
-  const handleClearImported = useCallback(() => {
-    setImportedProperties(prev => {
-      // Delete all imported properties from Supabase
-      prev.forEach(p => {
-        const dbId = dbIdMap.current[p.id] || p._dbId
-        if (dbId) deletePropertyFromDb(dbId)
-      })
-      return []
-    })
-    setSelectedProperty(prev => {
-      if (prev && prev.imported) return null
-      return prev
-    })
   }, [])
 
   const handleSelectProperty = useCallback((p) => {
@@ -2663,26 +2544,16 @@ export default function App() {
     savePropertyToDb(propToSave).then(newDbId => {
       if (newDbId) dbIdMap.current[updated.id] = newDbId
     })
-    // Check if it's an imported property
-    setImportedProperties(prev => {
-      const found = prev.find(p => p.id === updated.id)
-      if (found) return prev.map(p => p.id === updated.id ? updated : p)
-      return prev
-    })
-    // If it's a sample property, store edits separately
-    const isSample = SAMPLE_PROPERTIES.some(p => p.id === updated.id)
-    if (isSample) setSampleEdits(prev => ({ ...prev, [updated.id]: updated }))
+    // Update in properties list
+    setProperties(prev => prev.map(p => p.id === updated.id ? updated : p))
   }, [])
 
   const handleDeleteProperty = useCallback((id) => {
     // Delete from Supabase if it has a DB record
     const dbId = dbIdMap.current[id]
     if (dbId) deletePropertyFromDb(dbId)
-    // Track as deleted so it's excluded from allProperties (works for both sample + imported)
-    setDeletedIds(prev => new Set([...prev, id]))
-    // Also clean up imported and sample edits state
-    setImportedProperties(prev => prev.filter(p => p.id !== id))
-    setSampleEdits(prev => { const next = { ...prev }; delete next[id]; return next })
+    // Remove from properties list
+    setProperties(prev => prev.filter(p => p.id !== id))
     // Clear selection
     setSelectedProperty(prev => prev && prev.id === id ? null : prev)
   }, [])
@@ -2743,7 +2614,7 @@ export default function App() {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {tab === 0 && <BuyBoxTab properties={allProperties} setProperties={handleSetProperties} onSelectProperty={handleSelectProperty} importedCount={importedProperties.length} onClearImported={handleClearImported} />}
+        {tab === 0 && <BuyBoxTab properties={allProperties} setProperties={handleSetProperties} onSelectProperty={handleSelectProperty} />}
         {tab === 1 && <UnderwritingTab property={selectedProperty} properties={allProperties} onSelectProperty={setSelectedProperty} onUpdateProperty={handleUpdateProperty} onDeleteProperty={handleDeleteProperty} />}
         {tab === 2 && <OfferLettersTab property={selectedProperty} properties={allProperties} onSelectProperty={(p) => { setSelectedProperty(p); setTab(2) }} />}
       </main>
