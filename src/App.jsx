@@ -1634,10 +1634,14 @@ out geom 200;`
   async function runQuery(query) {
     for (const server of servers) {
       try {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 20000) // 20s timeout per server
         const res = await fetch(server, {
           method: 'POST',
-          body: 'data=' + encodeURIComponent(query)
+          body: 'data=' + encodeURIComponent(query),
+          signal: ctrl.signal
         })
+        clearTimeout(timer)
         if (!res.ok) continue
         const d = await res.json()
         if (d.elements) return d.elements
@@ -1723,10 +1727,70 @@ out geom 200;`
   return grouped
 }
 
+// Look up county FIPS from coordinates — try FCC API first, then Census TIGERweb
+async function getCountyFromCoords(lat, lng) {
+  // Method 1: FCC Area API
+  try {
+    const fccRes = await fetch(`https://geo.fcc.gov/api/census/area?lat=${lat}&lon=${lng}&format=json`)
+    if (fccRes.ok) {
+      const fccData = await fccRes.json()
+      const fips = fccData?.results?.[0]?.county_fips
+      const name = fccData?.results?.[0]?.county_name
+      if (fips && fips.length >= 5) return { stateFips: fips.substring(0, 2), countyCode: fips.substring(2, 5), countyName: name }
+    }
+  } catch {}
+
+  // Method 2: Census TIGERweb (same service we use for population)
+  try {
+    const tigerUrl = `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Current/MapServer/82/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=STATE,COUNTY,BASENAME&f=json&returnGeometry=false`
+    const tigerRes = await fetch(tigerUrl)
+    if (tigerRes.ok) {
+      const tigerData = await tigerRes.json()
+      const feat = tigerData?.features?.[0]?.attributes
+      if (feat?.STATE && feat?.COUNTY) {
+        return { stateFips: feat.STATE, countyCode: feat.COUNTY, countyName: feat.BASENAME ? feat.BASENAME + ' County' : null }
+      }
+    }
+  } catch {}
+
+  return null
+}
+
+// Fetch Census County Business Patterns for NAICS 531130 (self-storage)
+async function fetchCensusBenchmark(lat, lng) {
+  try {
+    // Step 1: Get county FIPS from coordinates
+    const county = await getCountyFromCoords(lat, lng)
+    if (!county) return null
+
+    // Step 2: Query Census CBP for NAICS 531130 establishment count
+    // Try 2022 first, fall back to 2021
+    for (const year of [2022, 2021]) {
+      try {
+        const cbpRes = await fetch(
+          `https://api.census.gov/data/${year}/cbp?get=ESTAB,NAICS2017&for=county:${county.countyCode}&in=state:${county.stateFips}&NAICS2017=531130`
+        )
+        if (!cbpRes.ok) continue
+        const cbpData = await cbpRes.json()
+        if (cbpData && cbpData.length > 1) {
+          const estab = parseInt(cbpData[1][0])
+          if (!isNaN(estab)) {
+            return { count: estab, county: county.countyName, year }
+          }
+        }
+      } catch { continue }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function CompetitorsSection({ address, city, state, areaPopulation }) {
   const [competitors, setCompetitors] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [censusBenchmark, setCensusBenchmark] = useState(null)
   const lastLookup = useRef('')
 
   // Reset results when the property changes
@@ -1735,6 +1799,7 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
     if (key !== lastLookup.current) {
       setCompetitors(null)
       setError(null)
+      setCensusBenchmark(null)
       lastLookup.current = ''
     }
   }, [address, city, state])
@@ -1749,10 +1814,15 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
     geocodeLocation(address, city, state)
       .then(coords => {
         if (!coords) throw new Error('Could not geocode location')
-        return fetchCompetitors(coords.lat, coords.lng)
+        // Run OSM competitor search and Census benchmark in parallel
+        return Promise.all([
+          fetchCompetitors(coords.lat, coords.lng),
+          fetchCensusBenchmark(coords.lat, coords.lng)
+        ])
       })
-      .then(data => {
+      .then(([data, benchmark]) => {
         setCompetitors(data)
+        setCensusBenchmark(benchmark)
         setError(null)
       })
       .catch(err => setError(`Failed to fetch competitor data: ${err.message}`))
@@ -1819,6 +1889,9 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
           {competitors && (
             <span className="text-xs text-navy-400 bg-navy-50 px-2 py-1 rounded">
               {(within5.length + within10.length)} found via OpenStreetMap
+              {censusBenchmark && (
+                <span className="ml-1 text-navy-500"> · Census: ~{censusBenchmark.count} in {censusBenchmark.county}</span>
+              )}
             </span>
           )}
           {competitors && !loading && (
@@ -1849,7 +1922,7 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
       {competitors && !loading && (
         <div>
           {/* Summary cards */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-4 gap-4 mb-4">
             <div className="bg-navy-50 rounded-lg p-3">
               <div className="text-xs text-navy-500 mb-1">Within 5 miles</div>
               <div className="text-xl font-bold text-navy-900">{within5.length}</div>
@@ -1878,10 +1951,30 @@ function CompetitorsSection({ address, city, state, areaPopulation }) {
                 </div>
               )
             })()}
+            <div className="bg-navy-50 rounded-lg p-3">
+              <div className="text-xs text-navy-500 mb-1">Census Benchmark</div>
+              {censusBenchmark ? (
+                <>
+                  <div className="text-xl font-bold text-navy-900">~{censusBenchmark.count}</div>
+                  <div className="text-xs text-navy-500">{censusBenchmark.county} ({censusBenchmark.year})</div>
+                  {(() => {
+                    const osmCount = within5.length + within10.length
+                    const coverage = Math.round((osmCount / censusBenchmark.count) * 100)
+                    return (
+                      <div className={`text-xs font-medium mt-0.5 ${coverage >= 60 ? 'text-emerald-600' : coverage >= 30 ? 'text-amber-600' : 'text-red-600'}`}>
+                        OSM coverage: {coverage}%
+                      </div>
+                    )
+                  })()}
+                </>
+              ) : (
+                <div className="text-sm text-navy-300">—</div>
+              )}
+            </div>
           </div>
           {renderTable(within5, 'Within 5 miles')}
           {renderTable(within10, '5–10 miles')}
-          <p className="text-[10px] text-navy-300 mt-2">Square footage estimated from building footprints. Actual leasable SF may vary. Data source: OpenStreetMap.</p>
+          <p className="text-[10px] text-navy-300 mt-2">Square footage estimated from building footprints. Actual leasable SF may vary. Facilities: OpenStreetMap. Census benchmark: NAICS 531130 via Census County Business Patterns.</p>
         </div>
       )}
     </div>
