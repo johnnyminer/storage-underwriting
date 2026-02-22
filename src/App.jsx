@@ -129,6 +129,22 @@ const DEFAULT_SETTINGS = {
   homeLat: 39.9612,
   homeLng: -82.9988,
   defaultState: 'OH',
+  // Underwriting thresholds
+  minCapRate: 7,
+  maxExpenseRatio: 40,
+  minDSCR: 1.25,
+  minOccupancy: 70,
+  // Financing scenarios
+  sellerRate: 6.0,
+  sellerDown: 10,
+  sellerYears: 15,
+  sbaRate: 6.75,
+  sbaDown: 15,
+  sbaYears: 25,
+  conventionalRate: 6.3,
+  conventionalDown: 25,
+  conventionalYears: 25,
+  cashEarnest: 5,
 }
 
 function loadSettings() {
@@ -188,6 +204,7 @@ function getDistance(p) {
 }
 
 function runUnderwriting(prop, mgmtFeePct = 0.06, capExPct = 0.05) {
+  const s = loadSettings()
   const gpi = prop.unitCount * prop.avgRentPerUnit * 12
   const egi = gpi * prop.occupancyRate
   const mgmtFee = egi * mgmtFeePct
@@ -199,41 +216,37 @@ function runUnderwriting(prop, mgmtFeePct = 0.06, capExPct = 0.05) {
   const pricePerUnit = prop.purchasePrice / prop.unitCount
   const pricePerSF = prop.purchasePrice / (prop.totalSF || 1)
 
-  // Break-even occupancy: at what occupancy does NOI = 0?
-  // NOI = 0 when EGI = totalOpEx → GPI * occ = fixedOpEx + (GPI * occ * variablePcts)
-  // Fixed expenses = opex + tax + insurance; variable = mgmt + capex (as % of EGI)
   const fixedOpEx = prop.operatingExpenses + prop.propertyTax + prop.insurance
   const variablePct = mgmtFeePct + capExPct
   const breakEvenOcc = gpi > 0 ? fixedOpEx / (gpi * (1 - variablePct)) : 0
 
-  // Revenue per SF (annualized)
   const revenuePerSF = prop.totalSF > 0 ? egi / prop.totalSF : 0
 
   const scenarios = [
-    { name: "Seller Financed", downPct: 0.10, rate: 0.06, years: 15, earnestPct: 0.01 },
-    { name: "SBA 7(a)", downPct: 0.15, rate: 0.0675, years: 25, earnestPct: 0.01 },
-    { name: "Conventional", downPct: 0.25, rate: 0.063, years: 25, earnestPct: 0.02 },
-    { name: "Cash Offer", downPct: 1.0, rate: 0, years: 0, earnestPct: 0.05 },
-  ].map(s => {
-    const downPayment = prop.purchasePrice * s.downPct
+    { name: "Seller Financed", downPct: s.sellerDown / 100, rate: s.sellerRate / 100, years: s.sellerYears, earnestPct: 0.01 },
+    { name: "SBA 7(a)", downPct: s.sbaDown / 100, rate: s.sbaRate / 100, years: s.sbaYears, earnestPct: 0.01 },
+    { name: "Conventional", downPct: s.conventionalDown / 100, rate: s.conventionalRate / 100, years: s.conventionalYears, earnestPct: 0.02 },
+    { name: "Cash Offer", downPct: 1.0, rate: 0, years: 0, earnestPct: s.cashEarnest / 100 },
+  ].map(sc => {
+    const downPayment = prop.purchasePrice * sc.downPct
     const loanAmount = prop.purchasePrice - downPayment
-    const monthlyPayment = calcMonthlyPayment(loanAmount, s.rate, s.years)
+    const monthlyPayment = calcMonthlyPayment(loanAmount, sc.rate, sc.years)
     const annualDebt = monthlyPayment * 12
     const cashFlow = noi - annualDebt
     const dscr = annualDebt > 0 ? noi / annualDebt : Infinity
     const cashOnCash = downPayment > 0 ? cashFlow / downPayment : 0
     const closingCosts = prop.purchasePrice * 0.03
     const totalCashNeeded = downPayment + closingCosts
-    const earnestMoney = prop.purchasePrice * s.earnestPct
-    return { ...s, downPayment, loanAmount, monthlyPayment, annualDebt, cashFlow, dscr, cashOnCash, closingCosts, totalCashNeeded, earnestMoney }
+    const earnestMoney = prop.purchasePrice * sc.earnestPct
+    return { ...sc, downPayment, loanAmount, monthlyPayment, annualDebt, cashFlow, dscr, cashOnCash, closingCosts, totalCashNeeded, earnestMoney }
   })
 
   const reasons = []
-  if (capRate < 0.07) reasons.push("Cap rate below 7%")
-  if (expenseRatio > 0.40) reasons.push("Expense ratio above 40%")
-  if (scenarios[0].dscr < 1.25 && scenarios[0].dscr !== Infinity) reasons.push("DSCR below 1.25 (seller financed)")
-  if (scenarios[2].dscr < 1.25 && scenarios[2].dscr !== Infinity) reasons.push("DSCR below 1.25 (conventional)")
-  if (prop.occupancyRate < 0.70) reasons.push("Occupancy below 70%")
+  if (capRate < s.minCapRate / 100) reasons.push(`Cap rate below ${s.minCapRate}%`)
+  if (expenseRatio > s.maxExpenseRatio / 100) reasons.push(`Expense ratio above ${s.maxExpenseRatio}%`)
+  if (scenarios[0].dscr < s.minDSCR && scenarios[0].dscr !== Infinity) reasons.push(`DSCR below ${s.minDSCR} (seller financed)`)
+  if (scenarios[2].dscr < s.minDSCR && scenarios[2].dscr !== Infinity) reasons.push(`DSCR below ${s.minDSCR} (conventional)`)
+  if (prop.occupancyRate < s.minOccupancy / 100) reasons.push(`Occupancy below ${s.minOccupancy}%`)
   const autoVerdict = reasons.length === 0 ? 'PASS' : 'FAIL'
   const verdict = prop.verdictOverride || 'PENDING'
 
@@ -2569,6 +2582,73 @@ function SettingsTab({ settings, onSave }) {
             {geocoding ? 'Looking up...' : 'Auto-detect Coordinates'}
           </button>
           <span className="text-xs text-navy-400">Updates lat/lng from city, state, zip</span>
+        </div>
+      </div>
+
+      {/* Underwriting Thresholds */}
+      <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-6 mb-6">
+        <h3 className="text-lg font-semibold text-navy-900 mb-1">Underwriting Thresholds</h3>
+        <p className="text-sm text-navy-500 mb-4">Properties are flagged when they fall outside these thresholds.</p>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-navy-600 mb-1">Min Cap Rate (%)</label>
+            <input type="number" step="0.5" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form.minCapRate} onChange={e => setForm(f => ({ ...f, minCapRate: parseFloat(e.target.value) || 0 }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-navy-600 mb-1">Max Expense Ratio (%)</label>
+            <input type="number" step="1" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form.maxExpenseRatio} onChange={e => setForm(f => ({ ...f, maxExpenseRatio: parseFloat(e.target.value) || 0 }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-navy-600 mb-1">Min DSCR</label>
+            <input type="number" step="0.05" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form.minDSCR} onChange={e => setForm(f => ({ ...f, minDSCR: parseFloat(e.target.value) || 0 }))} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-navy-600 mb-1">Min Occupancy (%)</label>
+            <input type="number" step="1" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form.minOccupancy} onChange={e => setForm(f => ({ ...f, minOccupancy: parseFloat(e.target.value) || 0 }))} />
+          </div>
+        </div>
+      </div>
+
+      {/* Financing Scenarios */}
+      <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-6 mb-6">
+        <h3 className="text-lg font-semibold text-navy-900 mb-1">Financing Scenarios</h3>
+        <p className="text-sm text-navy-500 mb-4">Default rates and terms used in underwriting calculations.</p>
+
+        <div className="space-y-4">
+          {[
+            { label: 'Seller Financed', rateKey: 'sellerRate', downKey: 'sellerDown', yearsKey: 'sellerYears' },
+            { label: 'SBA 7(a)', rateKey: 'sbaRate', downKey: 'sbaDown', yearsKey: 'sbaYears' },
+            { label: 'Conventional', rateKey: 'conventionalRate', downKey: 'conventionalDown', yearsKey: 'conventionalYears' },
+          ].map(({ label, rateKey, downKey, yearsKey }) => (
+            <div key={rateKey} className="grid grid-cols-4 gap-4 items-end">
+              <div>
+                <label className="block text-xs font-semibold text-navy-700 mb-1">{label}</label>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-navy-600 mb-1">Rate (%)</label>
+                <input type="number" step="0.25" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form[rateKey]} onChange={e => setForm(f => ({ ...f, [rateKey]: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-navy-600 mb-1">Down (%)</label>
+                <input type="number" step="1" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form[downKey]} onChange={e => setForm(f => ({ ...f, [downKey]: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-navy-600 mb-1">Term (yrs)</label>
+                <input type="number" step="1" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form[yearsKey]} onChange={e => setForm(f => ({ ...f, [yearsKey]: parseInt(e.target.value) || 0 }))} />
+              </div>
+            </div>
+          ))}
+          <div className="grid grid-cols-4 gap-4 items-end">
+            <div>
+              <label className="block text-xs font-semibold text-navy-700 mb-1">Cash Offer</label>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-navy-600 mb-1">Earnest Money (%)</label>
+              <input type="number" step="1" className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" value={form.cashEarnest} onChange={e => setForm(f => ({ ...f, cashEarnest: parseFloat(e.target.value) || 0 }))} />
+            </div>
+            <div></div>
+          </div>
         </div>
       </div>
 
