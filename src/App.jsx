@@ -2454,6 +2454,21 @@ function UnderwritingTab({ property, properties, onSelectProperty, onUpdatePrope
         </div>
       </div>
 
+      {/* Work Notes / Scratchpad */}
+      <div className="bg-white rounded-2xl shadow-sm border border-navy-100 p-5 mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold text-navy-700 uppercase tracking-wide">Work Notes</h4>
+          <span className="text-xs text-navy-400">Auto-saves with property</span>
+        </div>
+        <textarea
+          className="w-full border border-navy-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-y min-h-[80px]"
+          rows={Math.max(4, (prop.notes || '').split('\n').length + 1)}
+          placeholder="Listing agent details, comps, renovation notes, due diligence items..."
+          value={prop.notes || ''}
+          onChange={e => handlePropEdit('notes', e.target.value)}
+        />
+      </div>
+
       {/* Key Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <MetricCard label="Gross Potential Income" value={fmt(uw.gpi)} sub="Annual (100% occupied)" />
